@@ -42,7 +42,7 @@ This is the single source of truth. All tools import from here. Never duplicate 
 
 ### Confirmed stat gene values (verified by player)
 Key confirmed values worth noting:
-- `06A1` = T (Toughness) crit v:9 — highest known value
+- `06A1` = T (Toughness) crit v:9 — joint-highest known (tied with 07J1 Ru v:9)
 - `06A2` = V (Versatility) **std** v:7 — was reclassified from crit to std
 - `06A3` = Fe (Ferocity) crit v:5
 - `07F3` = Fr (Frost) crit v:3
@@ -55,12 +55,15 @@ Key confirmed values worth noting:
 - `09E4` = V std v:5
 
 ### Still unknown stat (s: '?')
-`01F4`, `08A4`, `08C2`, `08E1`, `08F2`, `09A4`, `09B4`
-These are in the database but the stat type is unconfirmed.
+Only `03G3` remains (orange tier — never bred for, so stat/value are irrelevant).
+All former `?`-stat positions were confirmed 2026-06-10: 01F4=Ru, 08A4=I, 08C2=En,
+08E1=I, 08F2=Ru, 09A4=T, 09B4=En. Also corrected: 07F2 Fr→En, 09B3 En→Fe.
 
 ### Missing values (v:0) — critical genes
-49 critical genes in CR06–CR09 still have v:0 (value unknown).
-The gene editor tool exists to fill these in and export an updated database.
+All CR06–CR09 critical genes now have confirmed values (filled 2026-06-10 via the
+gene map editor). Joint-highest known value is now `07J1` Ru crit **v:9**, tying
+`06A1` T crit v:9. Other strong crits: 08B2 Fe v:7, 08A2 T v:7, 07C2 Fr v:7,
+07B4 En v:7, 06C2 Ru v:7.
 
 ---
 
