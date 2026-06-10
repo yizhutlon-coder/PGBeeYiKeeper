@@ -1,6 +1,6 @@
 // localStorage wrapper matching the async window.storage API the standalone
 // artifact versions used — keeps existing browser data under the same keys
-// (Calculator: 'pg-v3', tags: 'pg-tags-v1', GeneEditor: 'pg-gene-editor-v1').
+// (Calculator: 'pg-v3', tags: 'pg-tags-v1').
 export const storage = {
   async get(key) {
     const value = localStorage.getItem(key);

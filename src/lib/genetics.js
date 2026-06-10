@@ -148,3 +148,85 @@ export function poolCoverage(pool) {
   }
   return cov;
 }
+
+// ── FORECAST (two-parent generation projection) ───────────────────────────────
+// Classify what happens at each position when parents A × B are crossed.
+export function classifyPosition(a, b) {
+  const norm = v => (v === '?' ? 'D' : v); // treat unknown as dominant (conservative)
+  const av = norm(a), bv = norm(b);
+  if (av === 'R' && bv === 'R') return 'both_R';      // guaranteed 〇 in F1
+  if (av === 'R' && bv === 'D') return 'A_only';       // A diluted in F1 → all ⦿
+  if (av === 'D' && bv === 'R') return 'B_only';       // B diluted in F1 → all ⦿
+  if (av === 'R' && bv === 'x') return 'A_R_B_x';      // 50% R in F1
+  if (av === 'x' && bv === 'R') return 'A_x_B_R';      // 50% R in F1
+  if (av === 'x' && bv === 'x') return 'both_x';       // 25% R in F1
+  if (av === 'x' && bv === 'D') return 'A_x_only';     // 50% x in F1, at risk
+  if (av === 'D' && bv === 'x') return 'B_x_only';     // 50% x in F1, at risk
+  return 'neither';                                      // both D — can't get from this cross
+}
+
+// Expected F1 probability of R given position classification
+export function f1ProbR(cat) {
+  return { both_R:1, A_only:0, B_only:0, A_R_B_x:0.5, A_x_B_R:0.5,
+           both_x:0.25, A_x_only:0, B_x_only:0, neither:0 }[cat] ?? 0;
+}
+
+// Expected F1 probability of x (mixed) given classification
+export function f1ProbX(cat) {
+  return { both_R:0, A_only:1, B_only:1, A_R_B_x:0.5, A_x_B_R:0.5,
+           both_x:0.5, A_x_only:0.5, B_x_only:0.5, neither:0 }[cat] ?? 0;
+}
+
+// Monte Carlo: simulate N generations of sib-crossing with best-of-k selection.
+// Returns per-generation { gen, avgR, pct90, pct95 }.
+export function simulate(positions, gens, simsPerGen = 12000, litterSize = 8) {
+  const n = positions.length;
+  const results = [];
+
+  for (let gen = 0; gen <= gens; gen++) {
+    let sumR = 0, above90 = 0, above95 = 0;
+    const maxR = n;
+
+    for (let sim = 0; sim < simsPerGen; sim++) {
+      let bestR = -1, bestSpec = null;
+
+      for (let off = 0; off < litterSize; off++) {
+        const spec = new Array(n);
+        for (let i = 0; i < n; i++) {
+          const cat = positions[i].cat;
+          const pR = gen === 0 ? f1ProbR(cat) : positions[i].currentPR ?? f1ProbR(cat);
+          const pX = gen === 0 ? f1ProbX(cat) : positions[i].currentPX ?? f1ProbX(cat);
+          const r = Math.random();
+          if (r < pR) spec[i] = 'R';
+          else if (r < pR + pX) spec[i] = 'x';
+          else spec[i] = 'D';
+        }
+        const rCount = spec.filter((v,i) => v==='R').length +
+                       spec.filter((v,i) => v==='R' && positions[i].isCrit).length * 2; // weight crits
+        if (rCount > bestR) { bestR = rCount; bestSpec = spec; }
+      }
+
+      const actualR = bestSpec.filter(v => v==='R').length;
+      sumR += actualR;
+      if (actualR >= maxR * 0.9) above90++;
+      if (actualR >= maxR * 0.95) above95++;
+    }
+
+    if (gen < gens) {
+      for (let i = 0; i < n; i++) {
+        const cat = positions[i].cat;
+        const pR = gen === 0 ? f1ProbR(cat) : (positions[i].currentPR ?? f1ProbR(cat));
+        const pX = gen === 0 ? f1ProbX(cat) : (positions[i].currentPX ?? f1ProbX(cat));
+        const pD = Math.max(0, 1 - pR - pX);
+        const nextR = pR*pR + pR*pX + 0.25*pX*pX;
+        const nextX = 2*pR*pX*(0.5) + pR*pD + pX*pD + 0.5*pX*pX;
+        const selBoost = Math.min(0.15, (1-pR) * 0.2); // selection pushes R up
+        positions[i].currentPR = Math.min(1, nextR + selBoost);
+        positions[i].currentPX = Math.max(0, nextX - selBoost * 0.5);
+      }
+    }
+
+    results.push({ gen, avgR: sumR / simsPerGen, pct90: above90/simsPerGen*100, pct95: above95/simsPerGen*100 });
+  }
+  return results;
+}

@@ -132,25 +132,28 @@ Genome=BeeWasp
 ### Tool 2: Sib-Cross Planner (`Planner.jsx`)
 Multi-project manager for tracking a sib-cross breeding program.
 
+**Tabs:** Recommendations | Forecast | Gene Map | Specimens
+
 **Features:**
 - Multiple projects via project tab bar (click ✎ to rename, × to delete, + to add)
 - Each project: independent parents A+B, offspring pool, recommendations
 - Import offspring with gender + generation selector (F1–F8)
 - Recommendations ranked by expected 〇 output, showing clarify/recover/new/mixes pills
+- **Forecast tab** (`components/ForecastView.jsx`): Monte Carlo projection of sib-crossing
+  the project's two parents — generation timeline (avg 〇/gen, 90%/95% thresholds), max
+  achievable, and feasibility flags (diluted crits, "neither parent has it → need 3rd donor").
+  Auto-runs on the parents already loaded; no pasting. (Absorbed the old Breeding Plan tool.)
 - Gene map tab showing pool-wide coverage
 - Specimens tab with per-specimen scores
 - No window.confirm — uses inline two-step confirmation for destructive actions
 
 **Storage key:** `pg-planner-v2` (localStorage). Migrates from `pg-planner-v1` automatically.
 
-### Tool 3: Breeding Plan (`BreedingPlan.jsx`)
-One-shot tool: paste two parent genomes → get generation timeline and gene breakdown.
-Uses Monte Carlo simulation (best-of-8 selection over 7 generations).
-Classifies each gene position: free/easy/diluted/both_x/at_risk/neither.
-
-### Tool 4: Gene Editor (`GeneEditor.jsx`)
-Visual editor for the SG database. Load → edit values/stats → export JSON → paste back to Claude to update source.
-Used when the player discovers new gene values in-game.
+> The SG database (`geneData.js`) is edited directly. When the player discovers
+> new gene values in-game, Claude updates `geneData.js` — an interactive map
+> widget can be generated on request to collect the corrections. (A standalone
+> Gene Editor tool existed during the artifact era; it was removed once the
+> values were entered.)
 
 ---
 
@@ -251,16 +254,17 @@ src/
   data/
     geneData.js       ← SG database, single source of truth
   lib/
-    genetics.js       ← expR, scorePair, poolCoverage, specimenScore, getCoverage
-    parser.js         ← parseAll, parseGenome
+    genetics.js       ← expR, calcStats, scorePair, getTopPairs, getDelList, getCoverage, scorePairPool, specimenScore, poolCoverage, classifyPosition, f1ProbR, f1ProbX, simulate
+    parser.js         ← parseExport, parseAll, parseGenome
+    storage.js        ← localStorage shim (window.storage-compatible) + loadData/saveData
+    theme.js          ← shared color palette (C) + symCol
   components/
     CoverageMap.jsx   ← Shared chromosome heatmap
     ImportPanel.jsx   ← Shared genome import with gender + generation dropdowns
-  Calculator.jsx      ← Main stable manager (pg-genetics)
-  Planner.jsx         ← Sib-cross multi-project planner
-  BreedingPlan.jsx    ← Two-parent plan generator
-  GeneEditor.jsx      ← SG database editor
-  App.jsx             ← Navigation between tools
+    ForecastView.jsx  ← Monte Carlo generation forecast (Planner's Forecast tab)
+  Calculator.jsx      ← Main stable manager (pg-v3)
+  Planner.jsx         ← Sib-cross multi-project planner (+ Forecast tab)
+  App.jsx             ← Navigation between the two tools
 ```
 
 ---
@@ -272,4 +276,4 @@ npm run dev        # Start dev server (Vite)
 npm run build      # Production build
 ```
 
-When making changes to geneData.js, all four tools pick up the update automatically via imports.
+When making changes to geneData.js, both tools pick up the update automatically via imports.

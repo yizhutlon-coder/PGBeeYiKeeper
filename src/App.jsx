@@ -2,14 +2,10 @@ import { useState } from 'react';
 import { C } from './lib/theme.js';
 import Calculator from './Calculator.jsx';
 import Planner from './Planner.jsx';
-import BreedingPlan from './BreedingPlan.jsx';
-import GeneEditor from './GeneEditor.jsx';
 
 const TOOLS = [
   { id: 'calculator', label: 'Calculator', desc: 'Stable manager & pairings', Comp: Calculator },
-  { id: 'planner', label: 'Sib-Cross Planner', desc: 'Multi-project breeding tracker', Comp: Planner },
-  { id: 'plan', label: 'Breeding Plan', desc: 'Two-parent generation timeline', Comp: BreedingPlan },
-  { id: 'editor', label: 'Gene Editor', desc: 'SG database editor', Comp: GeneEditor },
+  { id: 'planner', label: 'Sib-Cross Planner', desc: 'Multi-project breeding tracker, with forecast', Comp: Planner },
 ];
 
 const NAV_KEY = 'pg-active-tool';

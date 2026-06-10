@@ -38,7 +38,7 @@ export function parseAll(text) {
   return text.split(/(?=\[Overview\])/i).filter(s => s.includes('[Genes]')).map(parseExport);
 }
 
-// Lightweight single-export parse — name + genome only (Planner / BreedingPlan)
+// Lightweight single-export parse — name + genome only (Planner)
 export function parseGenome(text) {
   const genome = {};
   let inG = false, name = 'Unknown';

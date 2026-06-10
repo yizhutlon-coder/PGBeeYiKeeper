@@ -4,6 +4,7 @@ import { expR, tierWeight, scorePairPool, specimenScore, poolCoverage } from './
 import { C, symCol } from './lib/theme.js';
 import CoverageMap from './components/CoverageMap.jsx';
 import ImportPanel from './components/ImportPanel.jsx';
+import ForecastView from './components/ForecastView.jsx';
 
 const STORE = 'pg-planner-v2';
 
@@ -274,7 +275,7 @@ export default function Planner() {
       {setupDone && (
         <>
           <div style={{display:'flex',borderBottom:'1px solid '+C.b,marginBottom:'14px',overflowX:'auto'}}>
-            {[['plan','Recommendations'],['progress','Gene Map'],['pool','Specimens']].map(([id,lb])=>(
+            {[['plan','Recommendations'],['forecast','Forecast'],['progress','Gene Map'],['pool','Specimens']].map(([id,lb])=>(
               <button key={id} style={tStyle(id)} onClick={()=>{setTab(id);setExpanded(null);}}>{lb}</button>
             ))}
           </div>
@@ -353,6 +354,11 @@ export default function Planner() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* FORECAST */}
+          {tab==='forecast' && (
+            <ForecastView a={parents.a} b={parents.b} />
           )}
 
           {/* GENE MAP */}
