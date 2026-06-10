@@ -12,7 +12,8 @@
       "mcp__visualize__show_widget",
       "Bash(npm run *)",
       "Bash(git restore *)",
-      "Bash(git commit -am ' *)"
+      "Bash(git commit -am ' *)",
+      "Bash(gh auth *)"
     ]
   }
 }
