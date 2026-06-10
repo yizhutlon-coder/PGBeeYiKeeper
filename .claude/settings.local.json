@@ -5,7 +5,10 @@
       "PowerShell(node --version)",
       "PowerShell(npm --version)",
       "PowerShell(Get-Content src\\\\Calculator.jsx -TotalCount 14 -Encoding UTF8; Write-Output '---'; Select-String -Path src\\\\Calculator.jsx -Pattern 'window\\\\.storage|function App\\\\\\(|export default' -Encoding UTF8 | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line.Trim\\(\\)\\)\" })",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "mcp__visualize__read_me",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
