@@ -1,0 +1,1244 @@
+﻿import { useState, useEffect } from 'react';
+import { SG, W, SYM, CRS, GROUPS } from './data/geneData.js';
+import { expR, calcStats, scorePair, getTopPairs, getDelList, getCoverage } from './lib/genetics.js';
+import { parseAll } from './lib/parser.js';
+import { storage } from './lib/storage.js';
+import { C } from './lib/theme.js';
+
+const TAG_COLORS = ['green','yellow','red','purple'];
+const TAG_HEX = { green:'#34D399', yellow:'#FCD34D', red:'#F87171', purple:'#C084FC' };
+function Pill({ label, color, bg }) {
+  return <span style={{ fontSize:'10px', fontWeight:500, padding:'2px 6px', borderRadius:'3px', background:bg, color, display:'inline-block' }}>{label}</span>;
+}
+
+function SpecimenGeneMap({ s, cov }) {
+  const [hov, setHov] = useState(null);
+  const chrMaxGroup = {};
+  for (const cr of CRS) chrMaxGroup[cr] = 0;
+  for (const c of Object.keys(SG)) {
+    const cr = c.slice(0,2); const gi = c.charCodeAt(2)-65;
+    if (chrMaxGroup[cr] !== undefined) chrMaxGroup[cr] = Math.max(chrMaxGroup[cr], gi);
+  }
+
+  function cellColor(coord) {
+    const info = SG[coord];
+    if (!info) return { bg:'#0D0F18', border:'#1A1E2F', isGene:false };
+    const v = s.genome[coord] || 'D';
+    const isCrit = info.t === 'crit' || info.t === 'gem';
+    const stabBest = cov[coord]?.best ?? 'D';
+    const isNew = stabBest === 'D' && (v === 'R' || v === 'x'); // this specimen has it but stable doesn't elsewhere
+
+    if (info.t === 'floor') return { bg:'#0C2A1E', border:'#1A4A30', isGene:true, dim:true };
+    if (info.t === 'orange') return { bg:'#1A1200', border:'#3A2800', isGene:true, dim:true };
+    if (v === 'R') return { bg: isCrit ? '#0C2200' : '#082010', border: isCrit ? '#4A7A00' : '#1A5030', bright:'#34D399', isGene:true, isCrit, isNew };
+    if (v === 'x') return { bg:'#1A1200', border:'#5A4000', bright:'#FCD34D', isGene:true, isCrit, isNew };
+    return { bg: isCrit ? '#2A0808' : '#0D0F18', border: isCrit ? C.danger : '#1A1E2F', bright: isCrit ? '#7A2020' : null, isGene:true, isCrit };
+  }
+
+  const hovInfo = hov ? { coord: hov, info: SG[hov], val: s.genome[hov] || 'D', stabBest: cov[hov]?.best ?? 'D' } : null;
+
+  return (
+    <div>
+      <div style={{ minHeight:'26px', marginBottom:'8px', padding:'4px 8px', borderRadius:'5px', background:'#0D0F18', border:'0.5px solid '+C.b, fontSize:'11px', color: hovInfo ? C.tx : C.dim }}>
+        {hovInfo && hovInfo.info
+          ? <>
+              <span style={{ fontFamily:'var(--font-mono)', color:C.crit, marginRight:'6px' }}>{hovInfo.coord}</span>
+              <span style={{ color:C.mu, marginRight:'6px' }}>{hovInfo.info.s}{hovInfo.info.t==='crit'?' ★':''}</span>
+              <span style={{ color: hovInfo.val==='R'?C.std : hovInfo.val==='x'?C.caution : C.dim }}>
+                {SYM[hovInfo.val]} {hovInfo.val==='R'?'〇':hovInfo.val==='x'?'⦿ mixed':'⬤ dominant'}
+              </span>
+              {hovInfo.stabBest==='D' && hovInfo.val!=='D' && <span style={{ color:C.floor, marginLeft:'6px', fontSize:'10px' }}>★ unique to this specimen</span>}
+            </>
+          : <span>Hover a cell for details</span>
+        }
+      </div>
+      <div style={{ overflowX:'auto' }}>
+        <div style={{ minWidth:'fit-content' }}>
+          <div style={{ display:'flex', gap:'3px', marginBottom:'3px', paddingLeft:'34px' }}>
+            {GROUPS.map(g => <div key={g} style={{ width:'62px', textAlign:'center', fontSize:'9px', color:C.mu, fontFamily:'var(--font-mono)', flexShrink:0 }}>{g}</div>)}
+          </div>
+          {CRS.map(cr => (
+            <div key={cr} style={{ display:'flex', alignItems:'center', gap:'3px', marginBottom:'2px' }}>
+              <div style={{ width:'30px', fontSize:'9px', color:C.mu, fontFamily:'var(--font-mono)', flexShrink:0, textAlign:'right', paddingRight:'4px' }}>CR{cr}</div>
+              {GROUPS.map((g, gi) => {
+                const isActive = gi <= (chrMaxGroup[cr] ?? 0);
+                return (
+                  <div key={g} style={{ display:'flex', gap:'2px', width:'62px', flexShrink:0, opacity: isActive ? 1 : 0.1 }}>
+                    {[1,2,3,4].map(p => {
+                      const coord = cr + g + p;
+                      const cs = cellColor(coord);
+                      return (
+                        <div key={p}
+                          onMouseEnter={() => setHov(coord)}
+                          onMouseLeave={() => setHov(null)}
+                          style={{ width:'12px', height:'12px', borderRadius:'2px', background: cs.bright || cs.bg, border:'0.5px solid '+cs.border, flexShrink:0, cursor:'default', opacity: cs.dim ? 0.5 : 1, boxShadow: cs.isNew ? '0 0 0 1.5px '+C.floor+'99' : hov===coord ? '0 0 0 1.5px #fff4' : 'none' }}
+                        />
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', marginTop:'8px', fontSize:'10px', color:C.mu }}>
+        {[['#34D399','〇 Recessive'],['#FCD34D','⦿ Mixed'],['#7A2020','⬤ Dominant'],['#0C2A1E','Floor'],['#1A1200','Locked/Orange']].map(([col,label]) => (
+          <div key={label} style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+            <div style={{ width:'10px', height:'10px', borderRadius:'2px', background:col, flexShrink:0 }} />{label}
+          </div>
+        ))}
+        <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+          <div style={{ width:'10px', height:'10px', borderRadius:'2px', background:'transparent', border:'1.5px solid '+C.floor, flexShrink:0 }} />Unique to this specimen
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AnalyzeGeneMap({ s, cov }) {
+  const [hov, setHov] = useState(null);
+  const chrMaxGroup = {};
+  for (const cr of CRS) chrMaxGroup[cr] = 0;
+  for (const c of Object.keys(SG)) {
+    const cr = c.slice(0,2); const gi = c.charCodeAt(2)-65;
+    if (chrMaxGroup[cr] !== undefined) chrMaxGroup[cr] = Math.max(chrMaxGroup[cr], gi);
+  }
+  function cellColor(coord) {
+    const info = SG[coord]; if (!info) return null;
+    if (info.t === 'floor' || info.t === 'orange') return { bg:'#0D0F18', border:'#1A1E2F', dot:null };
+    const v = s.genome[coord] || 'D';
+    const stabBest = cov[coord]?.best ?? 'D';
+    const isCrit = info.t === 'crit' || info.t === 'gem';
+    if (v === 'D' || v === '?') return { bg:'#0D0F18', border: isCrit ? '#2A1010' : '#1A1E2F', dot:null };
+    if (v === 'R') {
+      if (stabBest === 'D') return { bg:'#082010', border: isCrit ? '#F59E0B' : '#1A5030', dot:'#34D399', glow: isCrit ? '#F59E0B' : '#34D399', label:'NEW' };
+      if (stabBest === 'x') return { bg:'#030C22', border:'#3060A0', dot:'#60A5FA', label:'UP' };
+      return { bg:'#071A0E', border:'#1A4030', dot:'#1A6040', label:'OK' };
+    }
+    if (v === 'x') {
+      if (stabBest === 'D') return { bg:'#1A1200', border: isCrit ? '#F59E0B88' : '#5A4000', dot:'#FCD34D', glow: isCrit ? '#F59E0B88' : null, label:'NEW x' };
+      return { bg:'#100A00', border:'#3A2800', dot:'#7A6020', label:'x' };
+    }
+    return null;
+  }
+  const hovCs = hov ? cellColor(hov) : null;
+  const hovInfo = hov ? SG[hov] : null;
+  const hovState = hov ? (s.genome[hov] || 'D') : null;
+  return (
+    <div>
+      <div style={{ minHeight:'26px', marginBottom:'8px', padding:'4px 8px', borderRadius:'5px', background:'#0D0F18', border:'0.5px solid '+C.b, fontSize:'11px', color: hovCs ? C.tx : C.dim }}>
+        {hovCs && hovInfo
+          ? <>
+              <span style={{ fontFamily:'var(--font-mono)', color:C.crit, marginRight:'6px' }}>{hov}</span>
+              <span style={{ color:C.mu, marginRight:'6px' }}>{hovInfo.s}{hovInfo.t === 'crit' ? ' ★' : ''}</span>
+              <span style={{ color: hovCs.dot || C.dim }}>{SYM[hovState] || hovState} </span>
+              {hovCs.label && <span style={{ color: hovCs.dot || C.dim, fontSize:'10px' }}>{hovCs.label}</span>}
+            </>
+          : <span>Hover for details</span>
+        }
+      </div>
+      <div style={{ overflowX:'auto' }}>
+        <div style={{ minWidth:'fit-content' }}>
+          <div style={{ display:'flex', marginBottom:'3px', paddingLeft:'34px', gap:'3px' }}>
+            {GROUPS.map(g => <div key={g} style={{ width:'62px', textAlign:'center', fontSize:'9px', color:C.mu, fontFamily:'var(--font-mono)', flexShrink:0 }}>{g}</div>)}
+          </div>
+          {CRS.map(cr => (
+            <div key={cr} style={{ display:'flex', alignItems:'center', gap:'3px', marginBottom:'2px' }}>
+              <div style={{ width:'30px', fontSize:'9px', color:C.mu, fontFamily:'var(--font-mono)', flexShrink:0, textAlign:'right', paddingRight:'4px' }}>CR{cr}</div>
+              {GROUPS.map((g, gi) => {
+                const isActive = gi <= (chrMaxGroup[cr] ?? 0);
+                return (
+                  <div key={g} style={{ display:'flex', gap:'2px', width:'62px', flexShrink:0, opacity: isActive ? 1 : 0.1 }}>
+                    {[1,2,3,4].map(p => {
+                      const coord = cr + g + p;
+                      const cs = cellColor(coord);
+                      if (!cs) return <div key={p} style={{ width:'12px', height:'12px', borderRadius:'2px', background:'#0D0F18', border:'0.5px solid #1A1E2F', flexShrink:0 }} />;
+                      return (
+                        <div key={p} onMouseEnter={() => setHov(coord)} onMouseLeave={() => setHov(null)}
+                          style={{ width:'12px', height:'12px', borderRadius:'2px', background:cs.bg, border:'0.5px solid '+cs.border, flexShrink:0, cursor:'default', display:'flex', alignItems:'center', justifyContent:'center',
+                            boxShadow: cs.glow ? '0 0 0 1.5px '+cs.glow+'66' : hov === coord ? '0 0 0 1.5px #fff4' : 'none' }}>
+                          {cs.dot && <div style={{ width:'6px', height:'6px', borderRadius:'1px', background:cs.dot }} />}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', marginTop:'8px', fontSize:'10px', color:C.mu }}>
+        {[['#34D399','New (recessive)'],['#60A5FA','Upgrades pool'],['#1A6040','Confirms existing'],['#FCD34D','New (mixed)'],['#7A6020','Confirms mixed']].map(([col, label]) => (
+          <div key={label} style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+            <div style={{ width:'10px', height:'10px', borderRadius:'2px', background:col, flexShrink:0 }} />{label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AnalyzeStatBox({ label, val, color, sub }) {
+  return (
+    <div style={{ background:'#1A1E2F', border:'0.5px solid #252B42', borderRadius:'8px', padding:'10px 12px', flex:'1 1 120px', minWidth:0 }}>
+      <div style={{ fontSize:'20px', fontWeight:500, color: color || '#DCE4F8' }}>{val}</div>
+      <div style={{ fontSize:'11px', color:'#6B739E' }}>{label}</div>
+      {sub && <div style={{ fontSize:'10px', color:'#2E344F', marginTop:'1px' }}>{sub}</div>}
+    </div>
+  );
+}
+
+function AnalyzeChip({ c, info, col, bg }) {
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:'4px', fontFamily:'var(--font-mono)', fontSize:'11px', background:bg, color:col, padding:'3px 7px', borderRadius:'3px', border:'0.5px solid '+col+'55' }}>
+      {c} <span style={{ opacity:0.7 }}>({info.s}{info.v > 0 ? ' v:'+info.v : ''})</span>
+    </span>
+  );
+}
+
+export default function Calculator() {
+  const [specimens, setSpecimens] = useState([]);
+  const [tags, setTags] = useState({});
+  const [input, setInput] = useState('');
+  const [pending, setPending] = useState([]);
+  const [tab, setTab] = useState('import');
+  const [expand, setExpand] = useState(false);
+  const [expanded, setExpanded] = useState(null);
+  const [selectedMale, setSelectedMale] = useState(null);
+  const [hoveredGene, setHoveredGene] = useState(null);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameVal, setRenameVal] = useState('');
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
+  const [err, setErr] = useState('');
+  const [analyzeInput, setAnalyzeInput] = useState('');
+  const [analyzeResult, setAnalyzeResult] = useState(null);
+  const [analyzeGender, setAnalyzeGender] = useState('unknown');
+  const [analyzeErr, setAnalyzeErr] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try { const r = await storage.get('pg-v3'); if (r?.value) setSpecimens(JSON.parse(r.value)); }
+      catch(e) {}
+      try { const t = await storage.get('pg-tags-v1'); if (t?.value) setTags(JSON.parse(t.value)); }
+      catch(e) {}
+      setLoading(false);
+    })();
+  }, []);
+
+  async function persist(data) {
+    try { await storage.set('pg-v3', JSON.stringify(data)); setSaved(true); setTimeout(() => setSaved(false), 1500); }
+    catch(e) {}
+  }
+
+  function addSpecimens() {
+    if (!input.trim()) return;
+    try {
+      const parsed = parseAll(input);
+      if (!parsed.length) { setErr('No valid exports found. Each export must start with [Overview] and include [Genes].'); return; }
+      setPending(parsed); setErr('');
+    } catch(e) { setErr('Parse error: ' + e.message); }
+  }
+
+  function setPendingGender(id, gender) {
+    setPending(prev => prev.map(s => s.id === id ? { ...s, gender } : s));
+  }
+
+  function confirmImport() {
+    const updated = [...specimens, ...pending];
+    setSpecimens(updated); persist(updated);
+    setInput(''); setPending([]); setErr(''); setTab('stable');
+  }
+
+  function remove(id) { const u = specimens.filter(s => s.id !== id); setSpecimens(u); persist(u); }
+  function clearAll() { if (!window.confirm('Remove all specimens from stable?')) return; setSpecimens([]); persist([]); }
+  function confirmDelete() { if (deleteCandidate) { remove(deleteCandidate.id); setDeleteCandidate(null); } }
+
+  function toggleTag(id, color) {
+    setTags(prev => {
+      const next = { ...prev, [id]: prev[id] === color ? null : color };
+      try { storage.set('pg-tags-v1', JSON.stringify(next)); } catch(e) {}
+      return next;
+    });
+  }
+
+  function startRename(s) { setRenamingId(s.id); setRenameVal(s.name); }
+  function commitRename() {
+    if (!renamingId) return;
+    const trimmed = renameVal.trim();
+    if (trimmed) {
+      const updated = specimens.map(s => s.id === renamingId ? { ...s, name: trimmed } : s);
+      setSpecimens(updated); persist(updated);
+    }
+    setRenamingId(null); setRenameVal('');
+  }
+
+  function analyzeSpecimen() {
+    if (!analyzeInput.trim()) return;
+    try {
+      const parsed = parseAll(analyzeInput);
+      if (!parsed.length) { setAnalyzeErr('No valid export found.'); return; }
+      setAnalyzeResult(parsed[0]); setAnalyzeErr('');
+    } catch(e) { setAnalyzeErr('Parse error: ' + e.message); }
+  }
+
+  const males = specimens.filter(s => s.gender === 'male');
+  const females = specimens.filter(s => s.gender === 'female');
+  const { cov, critTotal, critCov, critProg, stdTotal, stdCov, stdProg } = getCoverage(specimens);
+  const pairs = getTopPairs(specimens, expand, cov);
+  // A specimen is "paired" if it has at least one valid partner of the opposite gender
+  const hasMales = males.length > 0;
+  const hasFemales = females.length > 0;
+  const pairedIds = new Set(specimens.filter(s =>
+    (s.gender === 'male' && hasFemales) || (s.gender === 'female' && hasMales)
+  ).map(s => s.id));
+  const delList = getDelList(specimens);
+
+  const tLabel = (base, n) => n > 0 ? base + ' (' + n + ')' : base;
+  const tStyle = id => ({
+    padding:'8px 14px', border:'none', background:'none', cursor:'pointer',
+    fontSize:'13px', fontWeight: tab === id ? 500 : 400,
+    color: tab === id ? C.tx : C.mu,
+    borderBottom:'2px solid ' + (tab === id ? C.crit : 'transparent'),
+    marginBottom:'-1px', whiteSpace:'nowrap', transition:'color 0.1s',
+  });
+
+  if (loading) return <div style={{ padding:'2rem', color:C.mu, background:C.bg, borderRadius:'12px', fontFamily:'var(--font-sans)' }}>Loading stable…</div>;
+
+  const dc = deleteCandidate;
+  const dcRisk = dc ? getDelList([dc, ...specimens.filter(s=>s.id!==dc.id)]).find(d=>d.s.id===dc.id) : null;
+
+  return (
+    <div style={{ position:'relative' }}>
+      {/* ── DELETE CONFIRMATION MODAL ── */}
+      {dc && (
+        <div style={{ position:'fixed', inset:0, zIndex:1000, background:'#000000BB', display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}
+          onClick={e => { if (e.target === e.currentTarget) setDeleteCandidate(null); }}>
+          <div style={{ background:C.card, border:'0.5px solid '+C.b, borderRadius:'14px', padding:'20px', maxWidth:'680px', width:'100%', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 24px 80px #000' }}>
+            {/* Header */}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'14px' }}>
+              <div>
+                <div style={{ fontSize:'15px', fontWeight:500, marginBottom:'3px' }}>
+                  <span style={{ color: dc.gender==='male'?'#60A5FA':dc.gender==='female'?'#F472B6':C.mu, marginRight:'5px', fontWeight:600 }}>
+                    {dc.gender==='male'?'♂':dc.gender==='female'?'♀':'?'}
+                  </span>
+                  {dc.name}
+                </div>
+                <div style={{ fontSize:'12px', color:C.mu }}>Remove this specimen from the stable?</div>
+              </div>
+              <button onClick={() => setDeleteCandidate(null)} style={{ border:'none', background:'none', cursor:'pointer', color:C.mu, fontSize:'20px', padding:'0', lineHeight:1 }}>×</button>
+            </div>
+
+            {/* Pool loss breakdown */}
+            {(() => {
+              const others = specimens.filter(s => s.id !== dc.id);
+              // For each stat gene this specimen carries (R or x),
+              // check what the best state is across remaining specimens
+              const lostR  = { crit:[], std:[] }; // nobody else has R — gene fully lost
+              const lostRx = { crit:[], std:[] }; // nobody else has R, but someone has x (in progress survives)
+              const degraded = { crit:[], std:[] }; // others have x only, this was the only R
+              
+              for (const [c, info] of Object.entries(SG)) {
+                if (info.t === 'floor' || info.t === 'orange') continue;
+                const myState = dc.genome[c] || 'D';
+                if (myState === 'D') continue; // doesn't have it
+                
+                const tier = (info.t === 'crit' || info.t === 'gem') ? 'crit' : 'std';
+                const othersHaveR = others.some(o => (o.genome[c]||'D') === 'R');
+                const othersHaveX = others.some(o => (o.genome[c]||'D') === 'x');
+                
+                if (myState === 'R') {
+                  if (!othersHaveR && !othersHaveX) lostR[tier].push({ c, stat:info.s, v:info.v });
+                  else if (!othersHaveR && othersHaveX) degraded[tier].push({ c, stat:info.s, v:info.v });
+                } else if (myState === 'x') {
+                  if (!othersHaveR && !othersHaveX) lostRx[tier].push({ c, stat:info.s, v:info.v });
+                }
+              }
+              
+              const hasAnything = lostR.crit.length || lostR.std.length || lostRx.crit.length || lostRx.std.length || degraded.crit.length || degraded.std.length;
+              if (!hasAnything) return (
+                <div style={{ background:'#071A0E', border:'0.5px solid #1A5030', borderRadius:'8px', padding:'10px 12px', marginBottom:'14px', fontSize:'12px', color:'#34D399' }}>
+                  ✓ No genes will be lost — all positions covered by other specimens
+                </div>
+              );
+              
+              const Chip = ({ c, stat, v, col, bg }) => (
+                <span style={{ display:'inline-flex', alignItems:'center', gap:'4px', fontFamily:'var(--font-mono)', fontSize:'11px', background:bg, color:col, padding:'3px 7px', borderRadius:'3px', border:'0.5px solid '+col+'55' }}>
+                  {c} <span style={{ opacity:0.7 }}>({stat}{v>0?' v:'+v:''})</span>
+                </span>
+              );
+              
+              return (
+                <div style={{ marginBottom:'14px', display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {/* Fully lost — no one has it */}
+                  {(lostR.crit.length > 0) && (
+                    <div style={{ background:C.dangerBg, border:'0.5px solid '+C.danger, borderRadius:'8px', padding:'10px 12px' }}>
+                      <div style={{ fontSize:'12px', fontWeight:600, color:C.danger, marginBottom:'6px' }}>⛔ Critical genes permanently lost from pool</div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                        {lostR.crit.map(g => <Chip key={g.c} {...g} col={C.danger} bg='#2A0808' />)}
+                      </div>
+                    </div>
+                  )}
+                  {(lostR.std.length > 0) && (
+                    <div style={{ background:'#180808', border:'0.5px solid #7A2020', borderRadius:'8px', padding:'10px 12px' }}>
+                      <div style={{ fontSize:'12px', fontWeight:500, color:'#C07070', marginBottom:'6px' }}>✕ Standard genes permanently lost from pool</div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                        {lostR.std.map(g => <Chip key={g.c} {...g} col='#C07070' bg='#200808' />)}
+                      </div>
+                    </div>
+                  )}
+                  {/* Only had x — nobody has it at all */}
+                  {(lostRx.crit.length > 0 || lostRx.std.length > 0) && (
+                    <div style={{ background:'#1A1200', border:'0.5px solid '+C.caution, borderRadius:'8px', padding:'10px 12px' }}>
+                      <div style={{ fontSize:'12px', fontWeight:500, color:C.caution, marginBottom:'6px' }}>⚠ Genes lost — only as ⦿ in this specimen (no one has these)</div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                        {[...lostRx.crit, ...lostRx.std].map(g => <Chip key={g.c} {...g} col={C.caution} bg='#1A1200' />)}
+                      </div>
+                    </div>
+                  )}
+                  {/* Degraded — this was the only R, others have x */}
+                  {(degraded.crit.length > 0 || degraded.std.length > 0) && (
+                    <div style={{ background:'#0D0D00', border:'0.5px solid #5A5000', borderRadius:'8px', padding:'10px 12px' }}>
+                      <div style={{ fontSize:'12px', fontWeight:500, color:'#A09030', marginBottom:'6px' }}>↓ Gene pool degrades 〇→⦿ (others only have mixed)</div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                        {[...degraded.crit, ...degraded.std].map(g => <Chip key={g.c} {...g} col='#A09030' bg='#151000' />)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Gene map */}
+            <div style={{ marginBottom:'16px' }}>
+              <div style={{ fontSize:'12px', color:C.mu, marginBottom:'8px', fontWeight:500 }}>Genome overview</div>
+              <SpecimenGeneMap s={dc} cov={cov} />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+              <button onClick={() => setDeleteCandidate(null)}
+                style={{ padding:'8px 20px', borderRadius:'7px', border:'0.5px solid '+C.b, background:'transparent', color:C.mu, fontSize:'13px', cursor:'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={confirmDelete}
+                style={{ padding:'8px 20px', borderRadius:'7px', background:C.dangerBg, color:C.danger, fontSize:'13px', fontWeight:500, cursor:'pointer', border:'0.5px solid '+C.danger }}>
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <h2 className="sr-only">Project Gorgon Genetics Pairing Calculator</h2>
+
+      <div style={{ background:C.bg, fontFamily:'var(--font-sans)', color:C.tx, padding:'16px', borderRadius:'12px' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px', flexWrap:'wrap', gap:'8px' }}>
+        <div>
+          <span style={{ fontSize:'15px', fontWeight:500, letterSpacing:'0.01em' }}>PG Genetics</span>
+          <span style={{ fontSize:'12px', color:C.mu, marginLeft:'10px' }}>
+            {specimens.length} in stable &middot; {males.length}♂ {females.length}♀
+          </span>
+          {saved && <span style={{ fontSize:'12px', color:C.std, marginLeft:'8px' }}>✓ saved</span>}
+        </div>
+        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+          <label style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px', cursor:'pointer', padding:'5px 10px', borderRadius:'6px', border:'0.5px solid '+(expand?C.floor:C.b), background:expand?C.floorBg:'transparent', color:expand?C.floor:C.mu }}>
+            <input type="checkbox" checked={expand} onChange={e => setExpand(e.target.checked)} style={{ margin:0 }} />
+            Expansion mode
+          </label>
+        </div>
+      </div>
+
+      {/* TABS */}
+      <div style={{ display:'flex', borderBottom:'1px solid '+C.b, marginBottom:'16px', overflowX:'auto' }}>
+        {[['import','Import'],['stable',tLabel('Stable',specimens.length)],['pairings',tLabel('Pairs',pairs.length)],['manage','Manage'],['genes','Gene Map'],['analyze','Analyze']].map(([id,lb]) => (
+          <button key={id} style={tStyle(id)} onClick={() => { setTab(id); setExpanded(null); setSelectedMale(null); }}>{lb}</button>
+        ))}
+      </div>
+
+      {/* ── IMPORT ── */}
+      {tab === 'import' && (
+        <div>
+          {pending.length === 0 ? (
+            <>
+              <p style={{ fontSize:'13px', color:C.mu, margin:'0 0 10px', lineHeight:1.6 }}>
+                Paste one or more genome exports below. You will be able to set gender for each before they are added.
+              </p>
+              <textarea value={input} onChange={e => setInput(e.target.value)}
+                placeholder={"[Overview]\nFormat=v1.0\nCharacter=PlayerName\nEntity=My Bee\nGenome=BeeWasp\n\n[Genes]\n01= RDRD RDRR ...\n\n[Overview]\n...(paste more below)"}
+                style={{ width:'100%', minHeight:'180px', fontFamily:'var(--font-mono)', fontSize:'12px', padding:'10px', boxSizing:'border-box', resize:'vertical', borderRadius:'8px', border:'0.5px solid '+C.b, background:C.sf, color:C.tx, outline:'none', lineHeight:1.5 }}
+              />
+              {err && <p style={{ color:C.danger, fontSize:'12px', margin:'6px 0 0', lineHeight:1.5 }}>{err}</p>}
+              <div style={{ display:'flex', gap:'8px', marginTop:'10px', flexWrap:'wrap' }}>
+                <button onClick={addSpecimens} style={{ padding:'7px 18px', fontSize:'13px', cursor:'pointer' }}>Parse exports</button>
+                {specimens.length > 0 && <button onClick={clearAll} style={{ padding:'7px 18px', fontSize:'13px', cursor:'pointer', color:C.danger }}>Clear stable</button>}
+              </div>
+              <p style={{ fontSize:'11px', color:C.dim, marginTop:'12px', lineHeight:1.6 }}>
+                Stat gene map based on pre-patch research by Azizah &amp; Deldaron. ~6 positions may have higher post-patch values (exact positions unknown).
+              </p>
+            </>
+          ) : (
+            <>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', flexWrap:'wrap', gap:'8px' }}>
+                <div style={{ fontSize:'13px', fontWeight:500 }}>
+                  {pending.length} specimen{pending.length > 1 ? 's' : ''} ready — set gender before adding
+                </div>
+                <button onClick={() => { setPending([]); setErr(''); }} style={{ fontSize:'12px', padding:'5px 10px', cursor:'pointer', background:'transparent', color:C.mu, border:'0.5px solid '+C.b, borderRadius:'6px' }}>
+                  ← Back
+                </button>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'14px' }}>
+                {pending.map(s => {
+                  const gColor = s.gender === 'male' ? '#60A5FA' : s.gender === 'female' ? '#F472B6' : C.danger;
+                  return (
+                    <div key={s.id} style={{ background:C.card, border:'0.5px solid '+(s.gender==='unknown'?C.danger:C.b), borderRadius:'10px', padding:'12px 14px', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:500, fontSize:'13px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:gColor }}>
+                          {s.gender === 'male' ? '♂ ' : s.gender === 'female' ? '♀ ' : '⚠ '}{s.name || 'Unnamed'}
+                        </div>
+                        <div style={{ fontSize:'11px', color:C.dim, marginTop:'2px', fontFamily:'var(--font-mono)' }}>
+                          {Object.keys(s.genome).length} positions parsed
+                        </div>
+                      </div>
+                      <select
+                        value={s.gender}
+                        onChange={e => setPendingGender(s.id, e.target.value)}
+                        style={{ padding:'5px 10px', borderRadius:'6px', border:'0.5px solid '+(s.gender==='unknown'?C.danger:C.b), background:C.sf, color:gColor, fontSize:'13px', cursor:'pointer', fontWeight:500, outline:'none', flexShrink:0 }}
+                      >
+                        <option value="unknown" style={{ color:C.danger }}>— Select gender —</option>
+                        <option value="male" style={{ color:'#60A5FA' }}>♂ Male</option>
+                        <option value="female" style={{ color:'#F472B6' }}>♀ Female</option>
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+              {pending.some(s => s.gender === 'unknown') && (
+                <p style={{ fontSize:'12px', color:C.caution, margin:'0 0 10px' }}>
+                  Set gender for all specimens before adding.
+                </p>
+              )}
+              <div style={{ display:'flex', gap:'8px' }}>
+                <button
+                  onClick={confirmImport}
+                  disabled={pending.some(s => s.gender === 'unknown')}
+                  style={{ padding:'7px 18px', fontSize:'13px', cursor: pending.some(s => s.gender === 'unknown') ? 'not-allowed' : 'pointer', opacity: pending.some(s => s.gender === 'unknown') ? 0.4 : 1 }}
+                >
+                  Add {pending.length} to stable
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── STABLE ── */}
+      {tab === 'stable' && (
+        <div>
+          {specimens.length === 0
+            ? <p style={{ color:C.mu, fontSize:'14px' }}>No specimens loaded. Use Import to add genome exports.</p>
+            : <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(230px, 1fr))', gap:'10px' }}>
+                  {specimens.map(s => {
+                  const st = calcStats(s);
+                  const gColor = s.gender === 'male' ? '#60A5FA' : s.gender === 'female' ? '#F472B6' : C.mu;
+                  const gSym = s.gender === 'male' ? '♂' : s.gender === 'female' ? '♀' : '?';
+                  const tagColor = tags[s.id] ? TAG_HEX[tags[s.id]] : null;
+                  return (
+                    <div key={s.id} style={{ background:C.card, border:'0.5px solid '+(tagColor||C.b), borderRadius:'10px', padding:'12px 14px', boxShadow: tagColor ? 'inset 3px 0 0 '+tagColor : 'none' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'10px' }}>
+                        <div style={{ minWidth:0, flex:1 }}>
+                          {renamingId === s.id
+                            ? <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+                                <span style={{ color:gColor, fontWeight:600, flexShrink:0 }}>{gSym}</span>
+                                <input
+                                  autoFocus
+                                  value={renameVal}
+                                  onChange={e => setRenameVal(e.target.value)}
+                                  onBlur={commitRename}
+                                  onKeyDown={e => { if (e.key==='Enter') commitRename(); if (e.key==='Escape') { setRenamingId(null); setRenameVal(''); } }}
+                                  style={{ flex:1, minWidth:0, fontSize:'13px', fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid '+C.crit, outline:'none', color:C.tx, padding:'0 2px' }}
+                                />
+                              </div>
+                            : <div style={{ fontWeight:500, fontSize:'13px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', cursor:'text' }} onClick={() => startRename(s)} title="Click to rename">
+                                <span style={{ color:gColor, marginRight:'4px', fontWeight:600 }}>{gSym}</span>{s.name}
+                                <span style={{ color:C.dim, fontSize:'11px', marginLeft:'5px', opacity:0.6 }}>✎</span>
+                              </div>
+                          }
+                          <div style={{ fontSize:'11px', color:C.mu, marginTop:'2px', textTransform:'capitalize' }}>{s.gender}</div>
+                        </div>
+                        <button onClick={() => setDeleteCandidate(s)} style={{ border:'none', background:'none', cursor:'pointer', color:C.dim, fontSize:'16px', padding:'0', lineHeight:1, marginLeft:'6px', flexShrink:0 }}>×</button>
+                      </div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px', marginBottom:'8px' }}>
+                        {[['Score', st.score, C.tx],['Crit 〇', st.critR, C.crit],['Std 〇', st.stdR, C.std]].map(([lbl,val,col]) => (
+                          <div key={lbl} style={{ background:C.sf, borderRadius:'6px', padding:'5px 4px', textAlign:'center' }}>
+                            <div style={{ fontSize:'16px', fontWeight:500, color:col }}>{val}</div>
+                            <div style={{ fontSize:'10px', color:C.mu }}>{lbl}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {st.mixed > 0 && <Pill label={st.mixed + ' mixed stat genes'} color={C.mixed} bg={C.mixedBg} />}
+                    </div>
+                  );
+                })}
+              </div>
+          }
+        </div>
+      )}
+
+      {/* ── PAIRINGS ── */}
+      {tab === 'pairings' && (() => {
+        const females = specimens.filter(s => s.gender === 'female');
+
+        // All pairings for a given male, sorted by score
+        function malePairings(m) {
+          return females.map(f => ({
+            m, f, score: scorePair(m, f, expand, cov)
+          })).sort((a,b) => b.score - a.score);
+        }
+
+        // Mode banner
+        const banner = (
+          <div style={{ marginBottom:'12px', padding:'8px 12px', borderRadius:'7px', background: expand ? C.floorBg : C.sf, border:'0.5px solid '+(expand ? C.floor : C.b), fontSize:'12px', color: expand ? C.floor : C.mu, lineHeight:1.6 }}>
+            {expand
+              ? <><strong style={{ color:C.floor }}>Expansion mode:</strong> Females ranked by genes they can introduce to this male specifically. Fold-in candidates rank highest.</>
+              : <><strong style={{ color:C.mu }}>Clarification mode:</strong> Females ranked by expected recessive output in offspring. Best for cleaning up a known-good line.</>
+            }
+          </div>
+        );
+
+        if (males.length === 0) return (
+          <div>{banner}<p style={{ color:C.mu, fontSize:'14px' }}>No males in stable.</p></div>
+        );
+
+        // ── MALE LIST VIEW ──
+        if (!selectedMale) return (
+          <div>
+            {banner}
+            <div style={{ fontSize:'12px', color:C.mu, marginBottom:'10px' }}>Select a male to see his pairings</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:'8px' }}>
+              {males.map(m => {
+                const st = calcStats(m);
+                const tagColor = tags[m.id] ? TAG_HEX[tags[m.id]] : null;
+                const mPairs = malePairings(m);
+                const topScore = mPairs.length > 0 ? mPairs[0].score.toFixed(1) : '—';
+                const newCrit = females.length > 0 ? Math.max(...mPairs.map(p =>
+                  Object.entries(SG).filter(([c,info]) => (info.t==='crit'||info.t==='gem') && cov[c]?.best==='D' && (p.m.genome[c]||'D') in {R:1,x:1}).length
+                )) : 0;
+                return (
+                  <div key={m.id}
+                    onClick={() => { setSelectedMale(m.id); setExpanded(null); }}
+                    style={{ background:C.card, border:'0.5px solid '+(tagColor||C.b), borderRadius:'10px', padding:'12px 14px', cursor:'pointer', boxShadow: tagColor ? 'inset 3px 0 0 '+tagColor : 'none', transition:'border-color 0.1s' }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = '#4A5070'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = tagColor||C.b}
+                  >
+                    <div style={{ fontWeight:500, fontSize:'13px', marginBottom:'8px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {tagColor && <span style={{ display:'inline-block', width:'8px', height:'8px', borderRadius:'2px', background:tagColor, marginRight:'5px', verticalAlign:'middle' }} />}
+                      <span style={{ color:'#60A5FA' }}>♂ {m.name}</span>
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'5px', fontSize:'11px' }}>
+                      <div style={{ background:C.sf, borderRadius:'5px', padding:'4px 6px', textAlign:'center' }}>
+                        <div style={{ fontSize:'15px', fontWeight:500, color:C.tx }}>{st.critR}</div>
+                        <div style={{ color:C.mu }}>crit R</div>
+                      </div>
+                      <div style={{ background:C.sf, borderRadius:'5px', padding:'4px 6px', textAlign:'center' }}>
+                        <div style={{ fontSize:'15px', fontWeight:500, color:C.std }}>{st.stdR}</div>
+                        <div style={{ color:C.mu }}>std R</div>
+                      </div>
+                    </div>
+                    <div style={{ marginTop:'7px', fontSize:'11px', color:C.mu, display:'flex', justifyContent:'space-between' }}>
+                      <span>best score <span style={{ color:C.tx }}>{topScore}</span></span>
+                      {females.length === 0 && <span style={{ color:C.danger }}>no females</span>}
+                      {newCrit > 0 && <span style={{ color:C.floor }}>+{newCrit} new crit</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+
+        // ── PAIRINGS FOR SELECTED MALE ──
+        const m = specimens.find(s => s.id === selectedMale);
+        if (!m) { setSelectedMale(null); return null; }
+        const mPairs = malePairings(m);
+
+        return (
+          <div>
+            {banner}
+            {/* Back + male header */}
+            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'14px', flexWrap:'wrap' }}>
+              <button onClick={() => { setSelectedMale(null); setExpanded(null); }}
+                style={{ padding:'5px 12px', fontSize:'12px', cursor:'pointer', background:'transparent', color:C.mu, border:'0.5px solid '+C.b, borderRadius:'6px' }}>
+                ← Males
+              </button>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                {tags[m.id] && <span style={{ display:'inline-block', width:'9px', height:'9px', borderRadius:'2px', background:TAG_HEX[tags[m.id]] }} />}
+                <span style={{ color:'#60A5FA', fontWeight:500, fontSize:'14px' }}>♂ {m.name}</span>
+              </div>
+              <span style={{ fontSize:'12px', color:C.mu }}>{mPairs.length} female{mPairs.length !== 1 ? 's' : ''} available</span>
+            </div>
+
+            {mPairs.length === 0
+              ? <p style={{ color:C.mu, fontSize:'14px' }}>No females in stable to pair with.</p>
+              : <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {mPairs.map((p, i) => {
+                    const isExp = expanded === i;
+                    const m = p.m, f = p.f;
+
+                    // Fold-in: female has gene, male is missing it entirely
+                    const foldInCrit = Object.entries(SG).filter(([c,info]) => {
+                      if (info.t !== 'crit' && info.t !== 'gem') return false;
+                      const ms = m.genome[c]||'D', fs = f.genome[c]||'D';
+                      return (ms === 'D' || ms === '?') && (fs === 'R' || fs === 'x');
+                    }).length;
+                    const foldInStd = Object.entries(SG).filter(([c,info]) => {
+                      if (info.t !== 'std') return false;
+                      const ms = m.genome[c]||'D', fs = f.genome[c]||'D';
+                      return (ms === 'D' || ms === '?') && (fs === 'R' || fs === 'x');
+                    }).length;
+
+                    // Clarification: male has mixed, female has clean recessive — can resolve
+                    const clarCrit = Object.entries(SG).filter(([c,info]) => {
+                      if (info.t !== 'crit' && info.t !== 'gem') return false;
+                      return (m.genome[c]||'D') === 'x' && (f.genome[c]||'D') === 'R';
+                    }).length;
+                    const clarStd = Object.entries(SG).filter(([c,info]) => {
+                      if (info.t !== 'std') return false;
+                      return (m.genome[c]||'D') === 'x' && (f.genome[c]||'D') === 'R';
+                    }).length;
+
+                    // New to stable pool entirely
+                    const newCritGenes = Object.entries(SG).filter(([c,info]) => {
+                      if (info.t !== 'crit' && info.t !== 'gem') return false;
+                      if (cov[c]?.best !== 'D') return false;
+                      const ms = m.genome[c]||'D', fs = f.genome[c]||'D';
+                      return ms === 'R' || fs === 'R' || ms === 'x' || fs === 'x';
+                    }).length;
+                    const newStdGenes = Object.entries(SG).filter(([c,info]) => {
+                      if (info.t !== 'std') return false;
+                      if (cov[c]?.best !== 'D') return false;
+                      const ms = m.genome[c]||'D', fs = f.genome[c]||'D';
+                      return ms === 'R' || fs === 'R' || ms === 'x' || fs === 'x';
+                    }).length;
+
+                    const canClarify = clarCrit + clarStd > 0;
+                    const hasFoldIn = foldInCrit + foldInStd > 0;
+
+                    // Regression: male has clean R, female has nothing → offspring all ⦿ (cleanup cost)
+                    const regCrit = Object.entries(SG).filter(([c,info]) => {
+                      if (info.t !== 'crit' && info.t !== 'gem') return false;
+                      return (m.genome[c]||'D') === 'R' && (f.genome[c]||'D') === 'D';
+                    }).length;
+                    const regStd = Object.entries(SG).filter(([c,info]) => {
+                      if (info.t !== 'std') return false;
+                      return (m.genome[c]||'D') === 'R' && (f.genome[c]||'D') === 'D';
+                    }).length;
+
+                    const detail = isExp ? Object.entries(SG)
+                      .filter(([c, info]) => {
+                        if (info.t === 'floor') return false;
+                        // orange genes always included
+                        const ms = p.m.genome[c]||'D', fs = p.f.genome[c]||'D';
+                        return ms === 'R' || fs === 'R' || ms === 'x' || fs === 'x';
+                      })
+                      .map(([c, info]) => ({
+                        c, info,
+                        ms: p.m.genome[c]||'D',
+                        fs: p.f.genome[c]||'D',
+                        er: expR(p.m.genome[c]||'D', p.f.genome[c]||'D'),
+                        stabBest: cov[c]?.best ?? 'D',
+                      }))
+                      .sort((a,b) => {
+                        if (expand) {
+                          const aNew = a.stabBest==='D'?1:0, bNew = b.stabBest==='D'?1:0;
+                          if (bNew !== aNew) return bNew - aNew;
+                        }
+                        return (W[b.info.t]||1)-(W[a.info.t]||1) || b.er-a.er;
+                      })
+                      : [];
+
+                    return (
+                      <div key={i} style={{ border:'0.5px solid '+(newCritGenes>0&&expand?C.floor:C.b), borderRadius:'10px', overflow:'hidden', background:C.card }}>
+                        <div style={{ padding:'12px 14px', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center' }}
+                          onClick={() => setExpanded(isExp ? null : i)}>
+                          <div style={{ display:'flex', alignItems:'center', gap:'10px', minWidth:0, flex:1 }}>
+                            <span style={{ background:C.sf, borderRadius:'50%', width:'26px', height:'26px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', fontWeight:500, color:C.crit, flexShrink:0 }}>
+                              {i+1}
+                            </span>
+                            <div style={{ minWidth:0, flex:1 }}>
+                              <div style={{ fontSize:'13px', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:'5px' }}>
+                                {tags[f.id] && <span style={{ display:'inline-block', width:'8px', height:'8px', borderRadius:'2px', background:TAG_HEX[tags[f.id]], marginRight:'5px', verticalAlign:'middle' }} />}
+                                <span style={{ color:'#F472B6' }}>♀ {f.name}</span>
+                                <span style={{ fontSize:'11px', color:C.mu, fontWeight:400, marginLeft:'8px' }}>score {p.score.toFixed(1)}</span>
+                              </div>
+                              <div style={{ display:'flex', gap:'5px', flexWrap:'wrap' }}>
+                                <span style={{ fontSize:'11px', padding:'2px 7px', borderRadius:'4px', background: canClarify ? '#030C22' : C.sf, color: canClarify ? '#60A5FA' : C.dim, border:'0.5px solid '+(canClarify ? '#3060A0' : C.dim+'44') }}>
+                                  {canClarify
+                                    ? 'clarifies ' + (clarCrit > 0 ? clarCrit + ' crit' : '') + (clarCrit > 0 && clarStd > 0 ? ' + ' : '') + (clarStd > 0 ? clarStd + ' std' : '')
+                                    : 'no clarification'
+                                  }
+                                </span>
+                                {hasFoldIn && (
+                                  <span style={{ fontSize:'11px', padding:'2px 7px', borderRadius:'4px', background: foldInCrit > 0 ? C.critBg : C.stdBg, color: foldInCrit > 0 ? C.crit : C.std, border:'0.5px solid '+(foldInCrit > 0 ? C.crit+'55' : C.std+'55') }}>
+                                    {'fold-in: ' + (foldInCrit > 0 ? foldInCrit + ' crit' : '') + (foldInCrit > 0 && foldInStd > 0 ? ' + ' : '') + (foldInStd > 0 ? foldInStd + ' std' : '')}
+                                  </span>
+                                )}
+                                {(regCrit + regStd) > 0 && (
+                                  <span style={{ fontSize:'11px', padding:'2px 7px', borderRadius:'4px', background: regCrit > 0 ? C.dangerBg : '#180808', color: regCrit > 0 ? C.danger : '#C07070', border:'0.5px solid '+(regCrit > 0 ? C.danger+'55' : '#7A202055') }}>
+                                    {'mixes: ' + (regCrit > 0 ? regCrit + ' crit' : '') + (regCrit > 0 && regStd > 0 ? ' + ' : '') + (regStd > 0 ? regStd + ' std' : '')}
+                                  </span>
+                                )}
+                                {newCritGenes > 0 && (
+                                  <span style={{ fontSize:'11px', padding:'2px 7px', borderRadius:'4px', background:C.floorBg, color:C.floor, border:'0.5px solid '+C.floor+'55', fontWeight:500 }}>
+                                    {'+' + newCritGenes + ' new to pool'}
+                                  </span>
+                                )}
+                                {newStdGenes > 0 && newCritGenes === 0 && (
+                                  <span style={{ fontSize:'11px', padding:'2px 7px', borderRadius:'4px', background:C.stdBg, color:C.std+'aa', border:'0.5px solid '+C.std+'33' }}>
+                                    {'+' + newStdGenes + ' new std to pool'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <span style={{ color:C.dim, fontSize:'12px', flexShrink:0, marginLeft:'8px' }}>{isExp ? '▲' : '▼'}</span>
+                        </div>
+                        {isExp && (
+                          <div style={{ borderTop:'0.5px solid '+C.b, padding:'12px 14px', background:C.sf }}>
+                            <div style={{ fontSize:'11px', color:C.mu, marginBottom:'8px' }}>
+                              Positions where at least one parent has R or mixed — sorted by priority
+                            </div>
+                            {detail.length === 0
+                              ? <div style={{ fontSize:'12px', color:C.mu }}>No active stat gene positions in this pairing.</div>
+                              : <div style={{ display:'flex', flexWrap:'wrap', gap:'5px' }}>
+                                  {detail.map(({ c, info, ms, fs, er, stabBest }) => {
+                                    const erPct = Math.round(er*100);
+                                    const [bg, borderCol, pctCol] =
+                                      er>=1    ? [C.stdBg,    C.std,    C.std]   :
+                                      er>=0.5  ? [C.floorBg,  C.floor,  C.floor] :
+                                      er>=0.25 ? [C.cautionBg,C.caution,C.caution] :
+                                                 [C.dim+'22', C.b,      C.mu];
+                                    const labelCol = info.t==='crit'?C.crit:info.t==='gem'?C.gem:C.mu;
+                                    const symCol = v => v==='R'?C.std:v==='x'?C.mixed:C.mu;
+                                    return (
+                                      <div key={c} style={{ background:bg, border:'0.5px solid '+borderCol, borderRadius:'5px', padding:'4px 7px', fontSize:'11px', minWidth:'72px', boxShadow: stabBest==='D'?'0 0 0 1.5px '+C.floor+'88':'none' }}>
+                                        <div style={{ fontWeight:500, color:labelCol, fontFamily:'var(--font-mono)', fontSize:'10px', marginBottom:'1px', display:'flex', alignItems:'center', gap:'4px' }}>
+                                          {c}
+                                          {stabBest==='D' && <span style={{ fontSize:'9px', color:C.floor, background:C.floorBg, padding:'0 3px', borderRadius:'2px', fontFamily:'var(--font-sans)' }}>NEW</span>}
+                                        </div>
+                                        <div style={{ color:C.mu, fontSize:'10px' }}>{info.s}{info.t==='crit'?' ★':''}</div>
+                                        <div style={{ marginTop:'2px', display:'flex', alignItems:'center', gap:'2px' }}>
+                                          <span style={{ color:symCol(ms) }}>{SYM[ms]}</span>
+                                          <span style={{ color:C.dim }}>·</span>
+                                          <span style={{ color:symCol(fs) }}>{SYM[fs]}</span>
+                                          <span style={{ color:pctCol, fontWeight:500, marginLeft:'3px', fontSize:'10px' }}>{erPct}%</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                            }
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+            }
+          </div>
+        );
+      })()}
+
+      {/* ── MANAGE ── */}
+      {tab === 'manage' && (
+        <div>
+          {specimens.length === 0
+            ? <p style={{ color:C.mu, fontSize:'14px' }}>No specimens in stable.</p>
+            : <>
+                <p style={{ fontSize:'12px', color:C.mu, margin:'0 0 12px', lineHeight:1.6 }}>
+                  Ranked safest to most dangerous to remove. "Danger" = holds critical genes found nowhere else in your stable.
+                  Specimens not in the current pair recommendations are flagged — they contribute less to active breeding, strengthening the case for deletion. Note: a specimen may be absent simply because better options claimed their partners first.
+                </p>
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {delList.map(({ s, critR, uniq, score, risk, isOnly }) => {
+                    const inPairs = pairedIds.has(s.id);
+                    const rm = {
+                      safe:   { label:'Safe to remove',  color:C.safe,    bg:C.safeBg    },
+                      caution:{ label:'Caution',          color:C.caution, bg:C.cautionBg },
+                      danger: { label:'Do not remove',   color:C.danger,  bg:C.dangerBg  },
+                    }[risk];
+                    const gColor = s.gender==='male'?'#60A5FA':s.gender==='female'?'#F472B6':C.mu;
+                    const gSym = s.gender==='male'?'♂':s.gender==='female'?'♀':'?';
+                    const notPaired = !inPairs && specimens.length > 1;
+                    return (
+                      <div key={s.id} style={{ background:C.card, opacity: notPaired ? 0.72 : 1, border: tags[s.id] ? '0.5px solid '+TAG_HEX[tags[s.id]] : notPaired ? '1px dashed '+C.mu : '0.5px solid '+C.b, borderRadius:'10px', padding:'12px 14px', boxShadow: tags[s.id] ? 'inset 3px 0 0 '+TAG_HEX[tags[s.id]] : 'none' }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'8px', marginBottom:'8px' }}>
+                          <div>
+                            <div style={{ fontWeight:500, fontSize:'13px' }}>
+                              <span style={{ color:gColor, marginRight:'4px', fontWeight:600 }}>{gSym}</span>{s.name}
+                            </div>
+                            <div style={{ fontSize:'11px', color:C.mu, marginTop:'2px' }}>score {score} &middot; {critR.length} critical 〇</div>
+                          </div>
+                          <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0, flexWrap:'wrap', justifyContent:'flex-end' }}>
+                            {notPaired && (
+                              <span style={{ fontSize:'11px', fontWeight:500, padding:'3px 7px', borderRadius:'4px', background:'transparent', color:C.mu, border:'1px dashed '+C.mu, whiteSpace:'nowrap' }}>⊘ Not paired</span>
+                            )}
+                            <div style={{ display:'flex', gap:'3px' }}>
+                              {TAG_COLORS.map(c => (
+                                <button key={c} onClick={() => toggleTag(s.id, c)} title={c} style={{ width:'14px', height:'14px', borderRadius:'3px', cursor:'pointer', padding:0, border:'1.5px solid '+(tags[s.id]===c ? TAG_HEX[c] : TAG_HEX[c]+'55'), background: tags[s.id]===c ? TAG_HEX[c] : 'transparent', transition:'all 0.1s' }} />
+                              ))}
+                            </div>
+                            <span style={{ fontSize:'11px', fontWeight:500, padding:'3px 8px', borderRadius:'4px', background:rm.bg, color:rm.color, whiteSpace:'nowrap' }}>{rm.label}</span>
+                            <button onClick={() => setDeleteCandidate(s)} title="Remove from stable" style={{ border:'none', background:'none', cursor:'pointer', color:C.dim, fontSize:'17px', padding:'0 2px', lineHeight:1, flexShrink:0 }}>×</button>
+                          </div>
+                        </div>
+                        {isOnly && (
+                          <div style={{ fontSize:'11px', color:C.caution, background:C.cautionBg, padding:'3px 7px', borderRadius:'4px', display:'inline-block', marginBottom:'5px' }}>
+                            Only {s.gender} in stable — removing breaks all pairings
+                          </div>
+                        )}
+                        {uniq.length > 0 && (
+                          <div style={{ fontSize:'11px', color:C.danger, background:C.dangerBg, padding:'6px 8px', borderRadius:'5px', marginBottom:'4px' }}>
+                            <div style={{ fontWeight:500, marginBottom:'4px' }}>Unique critical genes — not found in any other specimen:</div>
+                            <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                              {uniq.map(({ c, stat }) => (
+                                <span key={c} style={{ fontFamily:'var(--font-mono)', fontSize:'10px', background:'#2A0808', padding:'2px 6px', borderRadius:'3px', color:C.danger }}>{c} ({stat})</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {critR.length > 0 && uniq.length === 0 && (
+                          <div style={{ fontSize:'11px', color:C.mu, display:'flex', flexWrap:'wrap', gap:'4px', alignItems:'center' }}>
+                            <span style={{ marginRight:'2px' }}>Critical 〇:</span>
+                            {critR.map(({ c, stat }) => (
+                              <span key={c} style={{ fontFamily:'var(--font-mono)', fontSize:'10px', background:C.critBg, color:C.crit, padding:'2px 6px', borderRadius:'3px' }}>{c} ({stat})</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+          }
+        </div>
+      )}
+      {/* ── ANALYZE ── */}
+      {tab === 'analyze' && (() => {
+        const ar = analyzeResult;
+        const analysis = ar ? (() => {
+          const newCritR=[], newCritX=[], newStdR=[], newStdX=[];
+          const upgradesCrit=[], upgradesStd=[];
+          const confirmsCrit=[], confirmsStd=[];
+          let specimenMixed=0, weightedScore=0;
+          for (const [c, info] of Object.entries(SG)) {
+            if (info.t === 'floor' || info.t === 'orange') continue;
+            const v = ar.genome[c] || 'D';
+            if (v === '?' || v === 'D') continue;
+            const stabBest = cov[c]?.best ?? 'D';
+            const isCrit = info.t === 'crit' || info.t === 'gem';
+            const w = W[info.t] || 1;
+            if (v === 'R') {
+              weightedScore += w;
+              if      (stabBest === 'D') isCrit ? newCritR.push({c,info}) : newStdR.push({c,info});
+              else if (stabBest === 'x') isCrit ? upgradesCrit.push({c,info}) : upgradesStd.push({c,info});
+              else                       isCrit ? confirmsCrit.push({c,info}) : confirmsStd.push({c,info});
+            } else if (v === 'x') {
+              specimenMixed++;
+              // mixed genes don't contribute to score — they give no stat bonus currently
+              if (stabBest === 'D') isCrit ? newCritX.push({c,info}) : newStdX.push({c,info});
+            }
+          }
+          const foldInGen = specimenMixed <= 2 ? 'minimal cleanup' :
+                            specimenMixed <= 6 ? '~3 back-cross gen' :
+                            specimenMixed <= 12 ? '~4 back-cross gen' : '~5+ back-cross gen';
+          return { newCritR, newCritX, newStdR, newStdX, upgradesCrit, upgradesStd,
+                   confirmsCrit, confirmsStd, specimenMixed, weightedScore, foldInGen };
+        })() : null;
+
+        return (
+          <div>
+            <p style={{ fontSize:'13px', color:C.mu, margin:'0 0 10px', lineHeight:1.6 }}>
+              Paste a genome export to see what it would contribute to your stable — without adding it.
+            </p>
+            <textarea value={analyzeInput} onChange={e => setAnalyzeInput(e.target.value)}
+              placeholder={'[Overview]\nFormat=v1.0\nEntity=Specimen Name\n\n[Genes]\n01= RDRD ...'}
+              style={{ width:'100%', minHeight:'120px', fontFamily:'var(--font-mono)', fontSize:'12px', padding:'10px', boxSizing:'border-box', resize:'vertical', borderRadius:'8px', border:'0.5px solid '+C.b, background:C.sf, color:C.tx, outline:'none', lineHeight:1.5 }}
+            />
+            {analyzeErr && <p style={{ color:C.danger, fontSize:'12px', margin:'4px 0 0' }}>{analyzeErr}</p>}
+            <div style={{ display:'flex', gap:'8px', marginTop:'8px', flexWrap:'wrap', alignItems:'center' }}>
+              <button onClick={analyzeSpecimen} style={{ padding:'7px 18px', fontSize:'13px', cursor:'pointer' }}>Analyze</button>
+              {ar && <button onClick={() => { setAnalyzeResult(null); setAnalyzeInput(''); setAnalyzeGender('unknown'); }} style={{ padding:'7px 14px', fontSize:'13px', cursor:'pointer', background:'transparent', color:C.mu, border:'0.5px solid '+C.b, borderRadius:'6px' }}>Clear</button>}
+            </div>
+
+            {ar && analysis && (
+              <div style={{ marginTop:'16px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px' }}>
+                  <span style={{ fontSize:'16px', fontWeight:500, color: ar.gender==='male'?'#60A5FA':ar.gender==='female'?'#F472B6':C.mu }}>
+                    {ar.gender==='male'?'♂':ar.gender==='female'?'♀':'?'}
+                  </span>
+                  <span style={{ fontSize:'15px', fontWeight:500 }}>{ar.name}</span>
+                </div>
+
+                <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'14px' }}>
+                  <AnalyzeStatBox label={'Score'} val={analysis.weightedScore.toFixed(1)} color={C.tx} />
+                  <AnalyzeStatBox label={'New crit recessive'} val={analysis.newCritR.length} color={C.crit} sub={analysis.newCritX.length > 0 ? '+'+analysis.newCritX.length+' as mixed' : ''} />
+                  <AnalyzeStatBox label={'New std recessive'} val={analysis.newStdR.length} color={C.std} sub={analysis.newStdX.length > 0 ? '+'+analysis.newStdX.length+' as mixed' : ''} />
+                  <AnalyzeStatBox label={'Upgrades pool'} val={analysis.upgradesCrit.length + analysis.upgradesStd.length} color={'#60A5FA'} />
+                  <AnalyzeStatBox label={'Mixed stat genes'} val={analysis.specimenMixed} color={analysis.specimenMixed > 15 ? C.danger : analysis.specimenMixed > 8 ? C.caution : C.mu} sub={analysis.foldInGen} />
+                </div>
+
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'14px' }}>
+                  {analysis.newCritR.length > 0 && (
+                    <div style={{ background:C.critBg, border:'0.5px solid '+C.crit, borderRadius:'8px', padding:'10px 12px' }}>
+                      <div style={{ fontSize:'12px', fontWeight:600, color:C.crit, marginBottom:'6px' }}>New critical genes — recessive, not in stable</div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                        {analysis.newCritR.map(({c,info}) => <AnalyzeChip key={c} c={c} info={info} col={C.crit} bg={'#1A1000'} />)}
+                      </div>
+                    </div>
+                  )}
+                  {analysis.newCritX.length > 0 && (
+                    <div style={{ background:'#150D00', border:'0.5px solid '+C.caution+'88', borderRadius:'8px', padding:'10px 12px' }}>
+                      <div style={{ fontSize:'12px', fontWeight:500, color:C.caution, marginBottom:'6px' }}>New critical genes — mixed only</div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                        {analysis.newCritX.map(({c,info}) => <AnalyzeChip key={c} c={c} info={info} col={C.caution} bg={'#1A1000'} />)}
+                      </div>
+                    </div>
+                  )}
+                  {analysis.newStdR.length > 0 && (
+                    <div style={{ background:C.stdBg, border:'0.5px solid '+C.std+'88', borderRadius:'8px', padding:'10px 12px' }}>
+                      <div style={{ fontSize:'12px', fontWeight:500, color:C.std, marginBottom:'6px' }}>New standard genes — recessive, not in stable</div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                        {analysis.newStdR.map(({c,info}) => <AnalyzeChip key={c} c={c} info={info} col={C.std} bg={'#050F08'} />)}
+                      </div>
+                    </div>
+                  )}
+                  {analysis.newStdX.length > 0 && (
+                    <div style={{ background:'#0D0D00', border:'0.5px solid #5A5000', borderRadius:'8px', padding:'10px 12px' }}>
+                      <div style={{ fontSize:'12px', fontWeight:500, color:'#9A9030', marginBottom:'6px' }}>New standard genes — mixed only</div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                        {analysis.newStdX.map(({c,info}) => <AnalyzeChip key={c} c={c} info={info} col={'#9A9030'} bg={'#141000'} />)}
+                      </div>
+                    </div>
+                  )}
+                  {(analysis.upgradesCrit.length + analysis.upgradesStd.length) > 0 && (
+                    <div style={{ background:'#030C22', border:'0.5px solid #3060A0', borderRadius:'8px', padding:'10px 12px' }}>
+                      <div style={{ fontSize:'12px', fontWeight:500, color:'#60A5FA', marginBottom:'6px' }}>Upgrades pool — stable has mixed, this has clean recessive</div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                        {[...analysis.upgradesCrit, ...analysis.upgradesStd].map(({c,info}) => <AnalyzeChip key={c} c={c} info={info} col={'#60A5FA'} bg={'#050C1A'} />)}
+                      </div>
+                    </div>
+                  )}
+                  {(analysis.confirmsCrit.length + analysis.confirmsStd.length) > 0 && (
+                    <div style={{ background:'#071A0E', border:'0.5px solid #1A4030', borderRadius:'8px', padding:'8px 12px' }}>
+                      <div style={{ fontSize:'11px', color:'#2A6040' }}>
+                        Confirms {analysis.confirmsCrit.length} crit + {analysis.confirmsStd.length} std already in stable (redundancy only)
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginBottom:'12px' }}>
+                  <div style={{ fontSize:'12px', color:C.mu, marginBottom:'8px', fontWeight:500 }}>Genome map — coloured by contribution to stable</div>
+                  {specimens.length === 0 && <div style={{ fontSize:'11px', color:C.caution, marginBottom:'6px' }}>No stable loaded — gene states shown without comparison</div>}
+                  <AnalyzeGeneMap s={ar} cov={cov} />
+                </div>
+
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:'10px', flexWrap:'wrap', paddingTop:'4px', borderTop:'0.5px solid '+C.b, marginTop:'4px' }}>
+                  <div style={{ fontSize:'12px', color:C.mu }}>Gender before adding:</div>
+                  <select
+                    value={analyzeGender}
+                    onChange={e => setAnalyzeGender(e.target.value)}
+                    style={{ padding:'5px 10px', borderRadius:'6px', border:'0.5px solid '+(analyzeGender==='unknown'?C.danger:C.b), background:C.sf, color: analyzeGender==='male'?'#60A5FA':analyzeGender==='female'?'#F472B6':C.danger, fontSize:'13px', cursor:'pointer', fontWeight:500, outline:'none' }}
+                  >
+                    <option value="unknown" style={{ color:C.danger }}>— Select gender —</option>
+                    <option value="male" style={{ color:'#60A5FA' }}>♂ Male</option>
+                    <option value="female" style={{ color:'#F472B6' }}>♀ Female</option>
+                  </select>
+                  <button
+                    disabled={analyzeGender === 'unknown'}
+                    onClick={() => {
+                      const updated = [...specimens, { ...ar, gender: analyzeGender, id: Date.now()+'-eval' }];
+                      setSpecimens(updated); persist(updated);
+                      setAnalyzeResult(null); setAnalyzeInput(''); setAnalyzeGender('unknown');
+                      setTab('stable');
+                    }}
+                    style={{ padding:'8px 20px', borderRadius:'7px', border:'0.5px solid '+(analyzeGender==='unknown'?C.b:C.std), background: analyzeGender==='unknown'?'transparent':C.stdBg, color: analyzeGender==='unknown'?C.dim:C.std, fontSize:'13px', fontWeight:500, cursor: analyzeGender==='unknown'?'not-allowed':'pointer', opacity: analyzeGender==='unknown'?0.45:1 }}
+                  >
+                    + Add to stable
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ── GENE MAP ── */}
+      {tab === 'genes' && (() => {
+        if (specimens.length === 0) return <p style={{ color:C.mu, fontSize:'14px' }}>No specimens loaded. Use Import to add genome exports.</p>;
+
+        // Cell color by coverage state + tier
+        const cellStyle = (coord) => {
+          const entry = cov[coord];
+          if (!entry) return { bg:'transparent', border:'transparent', show:false };
+          const { best, info } = entry;
+          const isCrit = info.t === 'crit' || info.t === 'gem';
+          const border = isCrit ? C.crit : info.t==='gem' ? C.gem : C.b;
+          if (best === 'floor')  return { bg:'#0C2A1E', border:'#1A4A30', show:true, dim:true };
+          if (best === 'locked') return { bg:'#1A1200', border:'#3A2800', show:true, dim:true };
+          if (best === 'R')      return { bg: isCrit ? '#0C2200' : '#082010', border: isCrit ? '#4A7A00' : '#1A5030', show:true, bright:'#34D399' };
+          if (best === 'x')      return { bg:'#1A1200', border:'#5A4000', show:true, bright:'#FCD34D' };
+          /* D */                return { bg: isCrit ? '#2A0808' : '#180808', border: isCrit ? C.danger : '#3A1010', show:true, bright: isCrit ? '#F87171' : '#7A2020' };
+        };
+
+        // Derive max group per chromosome from SG keys
+        const chrMaxGroup = {};
+        for (const cr of CRS) chrMaxGroup[cr] = 0;
+        for (const c of Object.keys(SG)) {
+          const cr = c.slice(0,2); const gi = c.charCodeAt(2)-65;
+          if (chrMaxGroup[cr] !== undefined) chrMaxGroup[cr] = Math.max(chrMaxGroup[cr], gi);
+        }
+
+        const critMissing = Object.entries(cov).filter(([,{best,info}]) => best==='D' && (info.t==='crit'||info.t==='gem')).sort(([a],[b])=>a.localeCompare(b));
+        const critInProg  = Object.entries(cov).filter(([,{best,info}]) => best==='x' && (info.t==='crit'||info.t==='gem')).sort(([a],[b])=>a.localeCompare(b));
+        const stdMissing  = Object.entries(cov).filter(([,{best,info}]) => best==='D' && info.t==='std').sort(([a],[b])=>a.localeCompare(b));
+        const stdInProg   = Object.entries(cov).filter(([,{best,info}]) => best==='x' && info.t==='std').sort(([a],[b])=>a.localeCompare(b));
+
+        const hov = hoveredGene ? cov[hoveredGene] : null;
+
+        return (
+          <div>
+            {/* Summary bar */}
+            <div style={{ display:'flex', gap:'8px', marginBottom:'14px', flexWrap:'wrap' }}>
+              {[
+                { label:`Critical covered`, val:`${critCov}/${critTotal}`, color:C.crit, sub: critProg>0?`${critProg} in progress`:'' },
+                { label:`Standard covered`, val:`${stdCov}/${stdTotal}`,  color:C.std,  sub: stdProg>0?`${stdProg} in progress`:'' },
+                { label:`Critical missing`, val:critTotal-critCov-critProg, color:C.danger, sub:'' },
+                { label:`Standard missing`, val:stdTotal-stdCov-stdProg,   color:C.mu,    sub:'' },
+              ].map(({ label, val, color, sub }) => (
+                <div key={label} style={{ background:C.card, border:'0.5px solid '+C.b, borderRadius:'8px', padding:'8px 12px', flex:'1 1 130px', minWidth:0 }}>
+                  <div style={{ fontSize:'18px', fontWeight:500, color }}>{val}</div>
+                  <div style={{ fontSize:'11px', color:C.mu }}>{label}</div>
+                  {sub && <div style={{ fontSize:'10px', color:C.caution, marginTop:'1px' }}>{sub}</div>}
+                </div>
+              ))}
+            </div>
+
+            {/* Hover info bar */}
+            <div style={{ minHeight:'32px', marginBottom:'10px', padding:'6px 10px', borderRadius:'6px', background:C.sf, border:'0.5px solid '+C.b, fontSize:'12px', color: hov ? C.tx : C.dim }}>
+              {hov
+                ? <>
+                    <span style={{ fontFamily:'var(--font-mono)', color:C.crit, marginRight:'8px' }}>{hoveredGene}</span>
+                    <span style={{ color:C.mu, marginRight:'8px' }}>{hov.info.s}{(hov.info.t==='crit'||hov.info.t==='gem')?' ★':''}</span>
+                    <span style={{ color: hov.best==='R'?C.std : hov.best==='x'?C.caution : hov.best==='floor'?C.floor : hov.best==='locked'?C.mu : C.danger }}>
+                      {hov.best==='R'?'〇 Covered':hov.best==='x'?'⦿ In progress (⦿ only)':hov.best==='floor'?'〇 Floor (always recessive)':hov.best==='locked'?'⬤ Locked (orange gene)':'⬤ Missing — no specimen has this gene'}
+                    </span>
+                    <span style={{ fontSize:'11px', color:C.mu, marginLeft:'8px', textTransform:'capitalize' }}>tier: {hov.info.t}</span>
+                  </>
+                : <span>Hover a cell for details</span>
+              }
+            </div>
+
+            {/* Genome grid */}
+            <div style={{ overflowX:'auto', marginBottom:'16px' }}>
+              <div style={{ minWidth:'fit-content' }}>
+                {/* Column headers — one per group */}
+                <div style={{ display:'flex', gap:'3px', marginBottom:'4px', paddingLeft:'36px' }}>
+                  {GROUPS.map(g => (
+                    <div key={g} style={{ width:'62px', textAlign:'center', fontSize:'10px', color:C.mu, fontFamily:'var(--font-mono)', flexShrink:0 }}>{g}</div>
+                  ))}
+                </div>
+                {CRS.map(cr => {
+                  const maxGi = chrMaxGroup[cr] ?? 0;
+                  return (
+                    <div key={cr} style={{ display:'flex', alignItems:'center', gap:'3px', marginBottom:'3px' }}>
+                      <div style={{ width:'32px', fontSize:'10px', color:C.mu, fontFamily:'var(--font-mono)', flexShrink:0, textAlign:'right', paddingRight:'4px' }}>CR{cr}</div>
+                      {GROUPS.map((g, gi) => {
+                        const isActive = gi <= maxGi;
+                        return (
+                          <div key={g} style={{ display:'flex', gap:'2px', width:'62px', flexShrink:0, opacity: isActive ? 1 : 0.15 }}>
+                            {[1,2,3,4].map(p => {
+                              const coord = cr + g + p;
+                              const cs = cellStyle(coord);
+                              if (!cs.show) return (
+                                <div key={p} style={{ width:'13px', height:'13px', borderRadius:'2px', background:'#0D0F18', border:'0.5px solid #1A1E2F', flexShrink:0 }} />
+                              );
+                              return (
+                                <div key={p}
+                                  onMouseEnter={() => setHoveredGene(coord)}
+                                  onMouseLeave={() => setHoveredGene(null)}
+                                  style={{ width:'13px', height:'13px', borderRadius:'2px', background: cs.bright || cs.bg, border:'0.5px solid '+cs.border, flexShrink:0, cursor:'default', transition:'transform 0.05s', boxShadow: hoveredGene===coord ? '0 0 0 1.5px #fff4' : 'none' }}
+                                />
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Legend */}
+            <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', marginBottom:'18px', fontSize:'11px', color:C.mu }}>
+              {[
+                { col:'#34D399', label:'Covered 〇' },
+                { col:'#FCD34D', label:'In progress ⦿' },
+                { col:'#F87171', label:'Missing (critical)' },
+                { col:'#7A2020', label:'Missing (standard)' },
+                { col:'#0C2A1E', label:'Floor (always 〇)' },
+                { col:'#1A1200', label:'Locked (orange)' },
+              ].map(({ col, label }) => (
+                <div key={label} style={{ display:'flex', alignItems:'center', gap:'5px' }}>
+                  <div style={{ width:'11px', height:'11px', borderRadius:'2px', background:col, flexShrink:0 }} />
+                  {label}
+                </div>
+              ))}
+              <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
+                <div style={{ width:'11px', height:'11px', borderRadius:'2px', background:'#2A0808', border:'0.5px solid '+C.danger, flexShrink:0 }} />
+                ★ border = critical tier
+              </div>
+            </div>
+
+            {/* Missing gene lists */}
+            {(critMissing.length > 0 || critInProg.length > 0) && (
+              <div style={{ marginBottom:'14px' }}>
+                <div style={{ fontSize:'12px', fontWeight:500, color:C.crit, marginBottom:'7px' }}>Critical — Missing or In Progress</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                  {critMissing.map(([c,{info}]) => (
+                    <span key={c} style={{ fontFamily:'var(--font-mono)', fontSize:'11px', background:C.dangerBg, color:C.danger, padding:'3px 7px', borderRadius:'4px', border:'0.5px solid #3A1010' }}>{c} <span style={{ color:C.mu }}>({info.s})</span> <span style={{ color:C.danger, fontSize:'10px' }}>missing</span></span>
+                  ))}
+                  {critInProg.map(([c,{info}]) => (
+                    <span key={c} style={{ fontFamily:'var(--font-mono)', fontSize:'11px', background:C.cautionBg, color:C.caution, padding:'3px 7px', borderRadius:'4px', border:'0.5px solid #3A2000' }}>{c} <span style={{ color:C.mu }}>({info.s})</span> <span style={{ color:C.caution, fontSize:'10px' }}>⦿ only</span></span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(stdMissing.length > 0 || stdInProg.length > 0) && (
+              <div>
+                <div style={{ fontSize:'12px', fontWeight:500, color:C.mu, marginBottom:'7px' }}>Standard — Missing or In Progress</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                  {stdMissing.map(([c,{info}]) => (
+                    <span key={c} style={{ fontFamily:'var(--font-mono)', fontSize:'11px', background:'#180808', color:'#A05050', padding:'3px 7px', borderRadius:'4px', border:'0.5px solid #2A1010' }}>{c} <span style={{ color:C.dim }}>({info.s})</span></span>
+                  ))}
+                  {stdInProg.map(([c,{info}]) => (
+                    <span key={c} style={{ fontFamily:'var(--font-mono)', fontSize:'11px', background:'#0F0D00', color:'#8A7A30', padding:'3px 7px', borderRadius:'4px', border:'0.5px solid #2A2000' }}>{c} <span style={{ color:C.dim }}>({info.s})</span> <span style={{ fontSize:'10px' }}>⦿</span></span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {critMissing.length===0 && critInProg.length===0 && stdMissing.length===0 && stdInProg.length===0 && (
+              <p style={{ color:C.std, fontSize:'13px' }}>All tracked stat genes are covered in your stable.</p>
+            )}
+          </div>
+        );
+      })()}
+    </div>
+    </div>
+  );
+}
+

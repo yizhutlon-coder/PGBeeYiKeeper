@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(foreach \\($f in @\\('pg-genetics.jsx','pg-planner.jsx','pg-breeding-plan.jsx','pg-gene-editor.jsx'\\)\\) { $lines = \\(Get-Content $f | Measure-Object -Line\\).Lines; Write-Output \"$f : $lines lines\" })",
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(Get-Content src\\\\Calculator.jsx -TotalCount 14 -Encoding UTF8; Write-Output '---'; Select-String -Path src\\\\Calculator.jsx -Pattern 'window\\\\.storage|function App\\\\\\(|export default' -Encoding UTF8 | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line.Trim\\(\\)\\)\" })",
+      "mcp__Claude_Preview__preview_start"
+    ]
+  }
+}
