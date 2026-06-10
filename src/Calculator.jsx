@@ -201,9 +201,7 @@ function AnalyzeChip({ c, info, col, bg }) {
 export default function Calculator() {
   const [specimens, setSpecimens] = useState([]);
   const [tags, setTags] = useState({});
-  const [input, setInput] = useState('');
-  const [pending, setPending] = useState([]);
-  const [tab, setTab] = useState('import');
+  const [tab, setTab] = useState('analyze');
   const [expand, setExpand] = useState(false);
   const [expanded, setExpanded] = useState(null);
   const [selectedMale, setSelectedMale] = useState(null);
@@ -211,7 +209,6 @@ export default function Calculator() {
   const [renamingId, setRenamingId] = useState(null);
   const [renameVal, setRenameVal] = useState('');
   const [deleteCandidate, setDeleteCandidate] = useState(null);
-  const [err, setErr] = useState('');
   const [analyzeInput, setAnalyzeInput] = useState('');
   const [analyzeResult, setAnalyzeResult] = useState(null);
   const [analyzeGender, setAnalyzeGender] = useState('unknown');
@@ -234,27 +231,7 @@ export default function Calculator() {
     catch(e) {}
   }
 
-  function addSpecimens() {
-    if (!input.trim()) return;
-    try {
-      const parsed = parseAll(input);
-      if (!parsed.length) { setErr('No valid exports found. Each export must start with [Overview] and include [Genes].'); return; }
-      setPending(parsed); setErr('');
-    } catch(e) { setErr('Parse error: ' + e.message); }
-  }
-
-  function setPendingGender(id, gender) {
-    setPending(prev => prev.map(s => s.id === id ? { ...s, gender } : s));
-  }
-
-  function confirmImport() {
-    const updated = [...specimens, ...pending];
-    setSpecimens(updated); persist(updated);
-    setInput(''); setPending([]); setErr(''); setTab('stable');
-  }
-
   function remove(id) { const u = specimens.filter(s => s.id !== id); setSpecimens(u); persist(u); }
-  function clearAll() { if (!window.confirm('Remove all specimens from stable?')) return; setSpecimens([]); persist([]); }
   function confirmDelete() { if (deleteCandidate) { remove(deleteCandidate.id); setDeleteCandidate(null); } }
 
   function toggleTag(id, color) {
@@ -453,86 +430,11 @@ export default function Calculator() {
 
       {/* TABS */}
       <div style={{ display:'flex', borderBottom:'1px solid '+C.b, marginBottom:'16px', overflowX:'auto' }}>
-        {[['import','Import'],['stable',tLabel('Stable',specimens.length)],['pairings',tLabel('Pairs',pairs.length)],['manage','Manage'],['genes','Gene Map'],['analyze','Analyze']].map(([id,lb]) => (
+        {[['analyze','Analyze'],['stable',tLabel('Stable',specimens.length)],['pairings',tLabel('Pairs',pairs.length)],['manage','Manage'],['genes','Gene Map']].map(([id,lb]) => (
           <button key={id} style={tStyle(id)} onClick={() => { setTab(id); setExpanded(null); setSelectedMale(null); }}>{lb}</button>
         ))}
       </div>
 
-      {/* ── IMPORT ── */}
-      {tab === 'import' && (
-        <div>
-          {pending.length === 0 ? (
-            <>
-              <p style={{ fontSize:'13px', color:C.mu, margin:'0 0 10px', lineHeight:1.6 }}>
-                Paste one or more genome exports below. You will be able to set gender for each before they are added.
-              </p>
-              <textarea value={input} onChange={e => setInput(e.target.value)}
-                placeholder={"[Overview]\nFormat=v1.0\nCharacter=PlayerName\nEntity=My Bee\nGenome=BeeWasp\n\n[Genes]\n01= RDRD RDRR ...\n\n[Overview]\n...(paste more below)"}
-                style={{ width:'100%', minHeight:'180px', fontFamily:'var(--font-mono)', fontSize:'12px', padding:'10px', boxSizing:'border-box', resize:'vertical', borderRadius:'8px', border:'0.5px solid '+C.b, background:C.sf, color:C.tx, outline:'none', lineHeight:1.5 }}
-              />
-              {err && <p style={{ color:C.danger, fontSize:'12px', margin:'6px 0 0', lineHeight:1.5 }}>{err}</p>}
-              <div style={{ display:'flex', gap:'8px', marginTop:'10px', flexWrap:'wrap' }}>
-                <button onClick={addSpecimens} style={{ padding:'7px 18px', fontSize:'13px', cursor:'pointer' }}>Parse exports</button>
-                {specimens.length > 0 && <button onClick={clearAll} style={{ padding:'7px 18px', fontSize:'13px', cursor:'pointer', color:C.danger }}>Clear stable</button>}
-              </div>
-              <p style={{ fontSize:'11px', color:C.dim, marginTop:'12px', lineHeight:1.6 }}>
-                Stat gene map based on pre-patch research by Azizah &amp; Deldaron. ~6 positions may have higher post-patch values (exact positions unknown).
-              </p>
-            </>
-          ) : (
-            <>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', flexWrap:'wrap', gap:'8px' }}>
-                <div style={{ fontSize:'13px', fontWeight:500 }}>
-                  {pending.length} specimen{pending.length > 1 ? 's' : ''} ready — set gender before adding
-                </div>
-                <button onClick={() => { setPending([]); setErr(''); }} style={{ fontSize:'12px', padding:'5px 10px', cursor:'pointer', background:'transparent', color:C.mu, border:'0.5px solid '+C.b, borderRadius:'6px' }}>
-                  ← Back
-                </button>
-              </div>
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'14px' }}>
-                {pending.map(s => {
-                  const gColor = s.gender === 'male' ? '#60A5FA' : s.gender === 'female' ? '#F472B6' : C.danger;
-                  return (
-                    <div key={s.id} style={{ background:C.card, border:'0.5px solid '+(s.gender==='unknown'?C.danger:C.b), borderRadius:'10px', padding:'12px 14px', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontWeight:500, fontSize:'13px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:gColor }}>
-                          {s.gender === 'male' ? '♂ ' : s.gender === 'female' ? '♀ ' : '⚠ '}{s.name || 'Unnamed'}
-                        </div>
-                        <div style={{ fontSize:'11px', color:C.dim, marginTop:'2px', fontFamily:'var(--font-mono)' }}>
-                          {Object.keys(s.genome).length} positions parsed
-                        </div>
-                      </div>
-                      <select
-                        value={s.gender}
-                        onChange={e => setPendingGender(s.id, e.target.value)}
-                        style={{ padding:'5px 10px', borderRadius:'6px', border:'0.5px solid '+(s.gender==='unknown'?C.danger:C.b), background:C.sf, color:gColor, fontSize:'13px', cursor:'pointer', fontWeight:500, outline:'none', flexShrink:0 }}
-                      >
-                        <option value="unknown" style={{ color:C.danger }}>— Select gender —</option>
-                        <option value="male" style={{ color:'#60A5FA' }}>♂ Male</option>
-                        <option value="female" style={{ color:'#F472B6' }}>♀ Female</option>
-                      </select>
-                    </div>
-                  );
-                })}
-              </div>
-              {pending.some(s => s.gender === 'unknown') && (
-                <p style={{ fontSize:'12px', color:C.caution, margin:'0 0 10px' }}>
-                  Set gender for all specimens before adding.
-                </p>
-              )}
-              <div style={{ display:'flex', gap:'8px' }}>
-                <button
-                  onClick={confirmImport}
-                  disabled={pending.some(s => s.gender === 'unknown')}
-                  style={{ padding:'7px 18px', fontSize:'13px', cursor: pending.some(s => s.gender === 'unknown') ? 'not-allowed' : 'pointer', opacity: pending.some(s => s.gender === 'unknown') ? 0.4 : 1 }}
-                >
-                  Add {pending.length} to stable
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
 
       {/* ── STABLE ── */}
       {tab === 'stable' && (
@@ -961,7 +863,7 @@ export default function Calculator() {
         return (
           <div>
             <p style={{ fontSize:'13px', color:C.mu, margin:'0 0 10px', lineHeight:1.6 }}>
-              Paste a genome export to see what it would contribute to your stable — without adding it.
+              Paste a genome export to preview what it contributes to your stable, then add it (with gender) from the bottom of the analysis.
             </p>
             <textarea value={analyzeInput} onChange={e => setAnalyzeInput(e.target.value)}
               placeholder={'[Overview]\nFormat=v1.0\nEntity=Specimen Name\n\n[Genes]\n01= RDRD ...'}
