@@ -9,21 +9,26 @@ export function expR(a, b) {
 
 // Simple crit-vs-std weight used by the planner
 export function tierWeight(info) {
-  return info.t === 'crit' ? 5 : 1;
+  return info.t === 'crit' ? 3 : 1;
 }
 
 // ── SPECIMEN STATS (Calculator) ───────────────────────────────────────────────
 export function calcStats(s) {
-  let score = 0, critR = 0, stdR = 0, mixed = 0;
+  let score = 0, critR = 0, stdR = 0, mutR = 0, mixed = 0;
   for (const [c, info] of Object.entries(SG)) {
     if (info.t === 'floor') continue;
     // orange genes always included (paramount tier)
     const v = s.genome[c] || 'D';
     const w = W[info.t] || 1;
-    if (v === 'R') { score += w; (info.t === 'crit' || info.t === 'gem') ? critR++ : stdR++; }
+    if (v === 'R') {
+      score += w;
+      if (info.t === 'crit' || info.t === 'gem') critR++;
+      else if (info.t === 'orange') mutR++;   // mutation-only paramount gene as 〇 — super rare
+      else stdR++;
+    }
     if (v === 'x') mixed++;
   }
-  return { score, critR, stdR, mixed };
+  return { score, critR, stdR, mutR, mixed };
 }
 
 // ── PAIR SCORING (Calculator) ─────────────────────────────────────────────────
@@ -91,10 +96,10 @@ export function getCoverage(specimens) {
   const cov = {};
   let critTotal=0, critCov=0, critProg=0;
   let stdTotal=0,  stdCov=0,  stdProg=0;
+  let mutTotal=0,  mutCov=0,  mutProg=0;   // orange / paramount (mutation-only) tier
 
   for (const [c, info] of Object.entries(SG)) {
     const isOrange = info.t === 'orange';
-    // orange genes always included in coverage
     const isCrit = info.t === 'crit' || info.t === 'gem';
     const isFloor = info.t === 'floor';
     if (isFloor) { cov[c] = { best:'floor', info }; continue; }
@@ -106,10 +111,11 @@ export function getCoverage(specimens) {
       if (v === 'x') best = 'x';
     }
     cov[c] = { best, info };
-    if (isCrit) { critTotal++; if (best==='R') critCov++; else if (best==='x') critProg++; }
-    else        { stdTotal++;  if (best==='R') stdCov++;  else if (best==='x') stdProg++;  }
+    if (isCrit)        { critTotal++; if (best==='R') critCov++; else if (best==='x') critProg++; }
+    else if (isOrange) { mutTotal++;  if (best==='R') mutCov++;  else if (best==='x') mutProg++;  }
+    else               { stdTotal++;  if (best==='R') stdCov++;  else if (best==='x') stdProg++;  }
   }
-  return { cov, critTotal, critCov, critProg, stdTotal, stdCov, stdProg };
+  return { cov, critTotal, critCov, critProg, stdTotal, stdCov, stdProg, mutTotal, mutCov, mutProg };
 }
 
 // ── POOL SCORING (Planner) ────────────────────────────────────────────────────

@@ -73,7 +73,7 @@ export const SG = {
 };
 
 // Tier weights for scoring
-export const W = { gem:10, crit:5, std:1, orange:7, floor:0 };
+export const W = { gem:10, crit:3, std:1, orange:7, floor:0 };
 
 // Gene state display symbols
 export const SYM = { R:'〇', D:'⬤', x:'⦿', '?':'?' };

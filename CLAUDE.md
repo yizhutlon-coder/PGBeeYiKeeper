@@ -26,7 +26,7 @@ The goal is to breed specimens where all stat genes are recessive (〇), which g
 
 ### Gene tiers (priority order)
 - 💎 **Orange / Paramount** — always dominant in wild, mutation-only. Tracked always. Coords: 01G3, 01I1, 02E2, 03F3, 03G3, 03I2, 03I4, 04A1, 04E2, 04E3
-- 🔴 **Critical (crit)** — CR06–CR09AB, rare, dominant-biased, highest breeding priority. Weight = 5×
+- 🔴 **Critical (crit)** — CR06–CR09AB, rare, dominant-biased, highest breeding priority. Weight = 3×
 - 🟡 **Standard (std)** — CR01–CR05, CR06A2, CR09C–E. Normal stat genes. Weight = 1×
 - 🔵 **Floor** — always recessive, never need to breed for. Ignored in scoring. Coords: 01D3, 03A4, 03B3, 03B4, 03D1, 03D3, 04B2, 04D1, 04D2
 - ⛔ **Orange** — always dominant, mutation only (see paramount above)
@@ -79,7 +79,7 @@ function expR(a, b) {
 ```
 
 ### Scoring modes
-**Clarification mode** (`expand = false`): rank pairings by expected 〇 in offspring. Weight each gene by tier (crit = 5×). Best for cleaning up a known-good line.
+**Clarification mode** (`expand = false`): rank pairings by expected 〇 in offspring. Weight each gene by tier (crit = 3×). Best for cleaning up a known-good line.
 
 **Expansion mode** (`expand = true`): rank pairings by what THIS MALE specifically lacks. Score based on male's genome, not stable-wide coverage:
 - Male has R → 0.1× weight (done)

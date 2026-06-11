@@ -206,6 +206,7 @@ export default function Calculator() {
   const [expanded, setExpanded] = useState(null);
   const [selectedMale, setSelectedMale] = useState(null);
   const [hoveredGene, setHoveredGene] = useState(null);
+  const [selectedGene, setSelectedGene] = useState(null);
   const [renamingId, setRenamingId] = useState(null);
   const [renameVal, setRenameVal] = useState('');
   const [deleteCandidate, setDeleteCandidate] = useState(null);
@@ -264,7 +265,7 @@ export default function Calculator() {
 
   const males = specimens.filter(s => s.gender === 'male');
   const females = specimens.filter(s => s.gender === 'female');
-  const { cov, critTotal, critCov, critProg, stdTotal, stdCov, stdProg } = getCoverage(specimens);
+  const { cov, critTotal, critCov, critProg, stdTotal, stdCov, stdProg, mutTotal, mutCov, mutProg } = getCoverage(specimens);
   const pairs = getTopPairs(specimens, expand, cov);
   // A specimen is "paired" if it has at least one valid partner of the opposite gender
   const hasMales = males.length > 0;
@@ -480,7 +481,12 @@ export default function Calculator() {
                           </div>
                         ))}
                       </div>
-                      {st.mixed > 0 && <Pill label={st.mixed + ' mixed stat genes'} color={C.mixed} bg={C.mixedBg} />}
+                      {(st.mutR > 0 || st.mixed > 0) && (
+                        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                          {st.mutR > 0 && <Pill label={'💎 ' + st.mutR + ' paramount 〇 (mutation)'} color={C.gem} bg={C.gemBg} />}
+                          {st.mixed > 0 && <Pill label={st.mixed + ' mixed stat genes'} color={C.mixed} bg={C.mixedBg} />}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -538,6 +544,7 @@ export default function Calculator() {
                     <div style={{ fontWeight:500, fontSize:'13px', marginBottom:'8px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                       {tagColor && <span style={{ display:'inline-block', width:'8px', height:'8px', borderRadius:'2px', background:tagColor, marginRight:'5px', verticalAlign:'middle' }} />}
                       <span style={{ color:'#60A5FA' }}>♂ {m.name}</span>
+                      {st.mutR > 0 && <span title="paramount 〇 mutations" style={{ marginLeft:'6px', fontSize:'10px', color:C.gem, background:C.gemBg, border:'0.5px solid '+C.gem+'66', borderRadius:'3px', padding:'1px 5px' }}>💎 {st.mutR}</span>}
                     </div>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'5px', fontSize:'11px' }}>
                       <div style={{ background:C.sf, borderRadius:'5px', padding:'4px 6px', textAlign:'center' }}>
@@ -774,6 +781,7 @@ export default function Calculator() {
                     const gColor = s.gender==='male'?'#60A5FA':s.gender==='female'?'#F472B6':C.mu;
                     const gSym = s.gender==='male'?'♂':s.gender==='female'?'♀':'?';
                     const notPaired = !inPairs && specimens.length > 1;
+                    const mutR = calcStats(s).mutR;
                     return (
                       <div key={s.id} style={{ background:C.card, opacity: notPaired ? 0.72 : 1, border: tags[s.id] ? '0.5px solid '+TAG_HEX[tags[s.id]] : notPaired ? '1px dashed '+C.mu : '0.5px solid '+C.b, borderRadius:'10px', padding:'12px 14px', boxShadow: tags[s.id] ? 'inset 3px 0 0 '+TAG_HEX[tags[s.id]] : 'none' }}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'8px', marginBottom:'8px' }}>
@@ -781,7 +789,7 @@ export default function Calculator() {
                             <div style={{ fontWeight:500, fontSize:'13px' }}>
                               <span style={{ color:gColor, marginRight:'4px', fontWeight:600 }}>{gSym}</span>{s.name}
                             </div>
-                            <div style={{ fontSize:'11px', color:C.mu, marginTop:'2px' }}>score {score} &middot; {critR.length} critical 〇</div>
+                            <div style={{ fontSize:'11px', color:C.mu, marginTop:'2px' }}>score {score} &middot; {critR.length} critical 〇{mutR > 0 && <span style={{ color:C.gem }}> &middot; 💎 {mutR} paramount 〇</span>}</div>
                           </div>
                           <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0, flexWrap:'wrap', justifyContent:'flex-end' }}>
                             {notPaired && (
@@ -890,6 +898,7 @@ export default function Calculator() {
                   <AnalyzeStatBox label={'New std recessive'} val={analysis.newStdR.length} color={C.std} sub={analysis.newStdX.length > 0 ? '+'+analysis.newStdX.length+' as mixed' : ''} />
                   <AnalyzeStatBox label={'Upgrades pool'} val={analysis.upgradesCrit.length + analysis.upgradesStd.length} color={'#60A5FA'} />
                   <AnalyzeStatBox label={'Mixed stat genes'} val={analysis.specimenMixed} color={analysis.specimenMixed > 15 ? C.danger : analysis.specimenMixed > 8 ? C.caution : C.mu} sub={analysis.foldInGen} />
+                  {calcStats(ar).mutR > 0 && <AnalyzeStatBox label={'Paramount 〇 (mutation)'} val={calcStats(ar).mutR} color={C.gem} sub={'mutation-only'} />}
                 </div>
 
                 <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'14px' }}>
@@ -990,6 +999,12 @@ export default function Calculator() {
           const isCrit = info.t === 'crit' || info.t === 'gem';
           const border = isCrit ? C.crit : info.t==='gem' ? C.gem : C.b;
           if (best === 'floor')  return { bg:'#0C2A1E', border:'#1A4A30', show:true, dim:true };
+          // Orange/paramount: mutation-only — locked (⬤) normally, lights up purple when a 〇 mutation is present
+          if (info.t === 'orange') {
+            if (best === 'R') return { bg:C.gemBg, border:C.gem, show:true, bright:C.gem };
+            if (best === 'x') return { bg:'#1A1200', border:'#5A4000', show:true, bright:'#FCD34D' };
+            return { bg:'#150B00', border:'#3A2800', show:true, dim:true };
+          }
           if (best === 'locked') return { bg:'#1A1200', border:'#3A2800', show:true, dim:true };
           if (best === 'R')      return { bg: isCrit ? '#0C2200' : '#082010', border: isCrit ? '#4A7A00' : '#1A5030', show:true, bright:'#34D399' };
           if (best === 'x')      return { bg:'#1A1200', border:'#5A4000', show:true, bright:'#FCD34D' };
@@ -1018,6 +1033,7 @@ export default function Calculator() {
               {[
                 { label:`Critical covered`, val:`${critCov}/${critTotal}`, color:C.crit, sub: critProg>0?`${critProg} in progress`:'' },
                 { label:`Standard covered`, val:`${stdCov}/${stdTotal}`,  color:C.std,  sub: stdProg>0?`${stdProg} in progress`:'' },
+                { label:`Paramount 〇 (mutation)`, val:`${mutCov}/${mutTotal}`, color:C.gem, sub: mutProg>0?`${mutProg} in progress`:'mutation-only' },
                 { label:`Critical missing`, val:critTotal-critCov-critProg, color:C.danger, sub:'' },
                 { label:`Standard missing`, val:stdTotal-stdCov-stdProg,   color:C.mu,    sub:'' },
               ].map(({ label, val, color, sub }) => (
@@ -1040,7 +1056,7 @@ export default function Calculator() {
                     </span>
                     <span style={{ fontSize:'11px', color:C.mu, marginLeft:'8px', textTransform:'capitalize' }}>tier: {hov.info.t}</span>
                   </>
-                : <span>Hover a cell for details</span>
+                : <span>Hover a cell for details · click for the stable breakdown</span>
               }
             </div>
 
@@ -1072,7 +1088,8 @@ export default function Calculator() {
                                 <div key={p}
                                   onMouseEnter={() => setHoveredGene(coord)}
                                   onMouseLeave={() => setHoveredGene(null)}
-                                  style={{ width:'13px', height:'13px', borderRadius:'2px', background: cs.bright || cs.bg, border:'0.5px solid '+cs.border, flexShrink:0, cursor:'default', transition:'transform 0.05s', boxShadow: hoveredGene===coord ? '0 0 0 1.5px #fff4' : 'none' }}
+                                  onClick={() => setSelectedGene(selectedGene === coord ? null : coord)}
+                                  style={{ width:'13px', height:'13px', borderRadius:'2px', background: cs.bright || cs.bg, border:'0.5px solid '+cs.border, flexShrink:0, cursor:'pointer', transition:'transform 0.05s', boxShadow: selectedGene===coord ? '0 0 0 2px #fff' : hoveredGene===coord ? '0 0 0 1.5px #fff4' : 'none' }}
                                 />
                               );
                             })}
@@ -1084,6 +1101,50 @@ export default function Calculator() {
                 })}
               </div>
             </div>
+
+            {/* Selected gene — per-specimen breakdown */}
+            {selectedGene && SG[selectedGene] && (() => {
+              const info = SG[selectedGene];
+              const rec = [], mix = [], dom = [];
+              for (const s of specimens) {
+                const v = s.genome[selectedGene] || 'D';
+                (v === 'R' ? rec : v === 'x' ? mix : dom).push(s);
+              }
+              const chip = (s, col) => (
+                <span key={s.id} style={{ fontSize:'11px', padding:'2px 8px', borderRadius:'4px', background:C.sf, color:C.tx, border:'0.5px solid '+col+'55', display:'inline-flex', alignItems:'center', gap:'4px' }}>
+                  <span style={{ color: s.gender==='male'?'#60A5FA':s.gender==='female'?'#F472B6':C.mu, fontWeight:600 }}>{s.gender==='male'?'♂':s.gender==='female'?'♀':'?'}</span>{s.name}
+                </span>
+              );
+              const tierCol = (info.t==='crit'||info.t==='gem') ? C.crit : info.t==='orange' ? C.gem : info.t==='floor' ? C.floor : C.std;
+              const group = (label, list, col) => (
+                <div>
+                  <div style={{ fontSize:'11px', color:col, marginBottom:'4px', fontWeight:500 }}>{label} ({list.length})</div>
+                  {list.length
+                    ? <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>{list.map(s => chip(s, col))}</div>
+                    : <div style={{ fontSize:'11px', color:C.dim }}>none</div>}
+                </div>
+              );
+              return (
+                <div style={{ marginBottom:'16px', background:C.card, border:'0.5px solid '+tierCol+'66', borderRadius:'10px', padding:'12px 14px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'10px', gap:'8px' }}>
+                    <div style={{ fontSize:'13px' }}>
+                      <span style={{ fontFamily:'var(--font-mono)', color:C.crit, fontWeight:500, marginRight:'8px' }}>{selectedGene}</span>
+                      <span style={{ color:C.tx, fontWeight:500 }}>{info.s}</span>
+                      <span style={{ color:tierCol, fontSize:'11px', marginLeft:'8px', textTransform:'capitalize' }}>{info.t}{(info.t==='crit'||info.t==='gem')?' ★':''}{info.v>0?' · v:'+info.v:''}</span>
+                    </div>
+                    <button onClick={() => setSelectedGene(null)} style={{ border:'none', background:'none', cursor:'pointer', color:C.mu, fontSize:'16px', lineHeight:1, padding:0, flexShrink:0 }}>×</button>
+                  </div>
+                  {specimens.length === 0
+                    ? <div style={{ fontSize:'12px', color:C.mu }}>No specimens in stable.</div>
+                    : <div style={{ display:'flex', flexDirection:'column', gap:'9px' }}>
+                        {group('〇 Recessive — breeds true', rec, C.std)}
+                        {group('⦿ Mixed — carrier, unpredictable', mix, C.caution)}
+                        {group('⬤ Dominant — lacks it', dom, C.mu)}
+                      </div>
+                  }
+                </div>
+              );
+            })()}
 
             {/* Legend */}
             <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', marginBottom:'18px', fontSize:'11px', color:C.mu }}>
