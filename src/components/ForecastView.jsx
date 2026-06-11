@@ -54,11 +54,30 @@ export default function ForecastView({ a, b }) {
       const maxAchievable = positions.filter(p => p.cat !== 'neither').length;
       const critNeither = positions.filter(p => p.cat === 'neither' && p.isCrit);
       const stdNeither  = positions.filter(p => p.cat === 'neither' && !p.isCrit);
+
+      // Max achievable split by tier (std + crit come from the simulated positions)
+      const critPos = positions.filter(p => p.isCrit);
+      const stdPos  = positions.filter(p => !p.isCrit);
+      const critTot = critPos.length, stdTot = stdPos.length;
+      const maxCrit = critPos.filter(p => p.cat !== 'neither').length;
+      const maxStd  = stdPos.filter(p => p.cat !== 'neither').length;
+
+      // Mutation / paramount (orange) — always ⬤ in the wild, so a gene is only
+      // achievable here if a parent already carries it (R or x). Tracked separately
+      // so it doesn't inflate the std/crit "impossible" count.
+      const mutPos = Object.entries(SG)
+        .filter(([, info]) => info.t === 'orange')
+        .map(([c, info]) => { const av=a.genome[c]||'D', bv=b.genome[c]||'D'; return { c, info, av, bv, cat: classifyPosition(av, bv) }; });
+      const mutTot = mutPos.length;
+      const mutCarried = mutPos.filter(p => p.cat !== 'neither');
+      const mutAch = mutCarried.length;
+
       const simPositions = positions
         .filter(p => p.cat !== 'neither')
         .map(p => ({ ...p, currentPR: f1ProbR(p.cat), currentPX: f1ProbX(p.cat) }));
       const timeline = simulate(simPositions, 7);
-      setPlan({ positions, cats, maxAchievable, critNeither, stdNeither, timeline });
+      setPlan({ positions, cats, maxAchievable, critNeither, stdNeither, timeline,
+                maxCrit, maxStd, critTot, stdTot, mutTot, mutAch, mutCarried });
       setRunning(false);
     }, 30);
   }
@@ -74,7 +93,7 @@ export default function ForecastView({ a, b }) {
     );
   }
 
-  const { positions, maxAchievable, critNeither, timeline } = plan;
+  const { positions, maxAchievable, critNeither, timeline, maxCrit, maxStd, critTot, stdTot, mutTot, mutAch, mutCarried } = plan;
   const free     = positions.filter(p => p.cat === 'both_R');
   const easy     = positions.filter(p => ['A_R_B_x','A_x_B_R'].includes(p.cat));
   const diluted  = positions.filter(p => ['A_only','B_only'].includes(p.cat));
@@ -93,9 +112,22 @@ export default function ForecastView({ a, b }) {
 
       {/* Summary */}
       <div style={{ background:C.card, border:'0.5px solid '+C.b, borderRadius:'10px', padding:'14px 16px', marginBottom:'12px' }}>
+        <div style={{ fontSize:'11px', color:C.mu, fontWeight:500, marginBottom:'8px' }}>Max achievable 〇 by tier</div>
+        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'14px' }}>
+          {[
+            ['Critical', maxCrit, critTot, C.crit],
+            ['Standard', maxStd, stdTot, C.std],
+            ['Mutation 〇 (paramount)', mutAch, mutTot, C.gem],
+          ].map(([label, val, tot, color]) => (
+            <div key={label} style={{ background:C.sf, borderRadius:'7px', padding:'8px 12px', textAlign:'center', flex:'1 1 110px' }}>
+              <div style={{ fontSize:'20px', fontWeight:500, color }}>{val}<span style={{ fontSize:'12px', color:C.mu, fontWeight:400 }}> / {tot}</span></div>
+              <div style={{ fontSize:'11px', color:C.mu }}>{label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize:'11px', color:C.mu, fontWeight:500, marginBottom:'8px' }}>Position breakdown (std + crit)</div>
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
           {[
-            ['Max achievable', maxAchievable, C.tx],
             ['Free (both 〇)', free.length, C.std],
             ['Need work', diluted.length + bothMix.length + easy.length, C.caution],
             ['At risk', atRisk.length, C.caution],
@@ -108,6 +140,20 @@ export default function ForecastView({ a, b }) {
           ))}
         </div>
       </div>
+
+      {/* Paramount mutations carried — super rare, worth locking in */}
+      {mutCarried.length > 0 && (
+        <div style={{ background:C.gemBg, border:'0.5px solid '+C.gem, borderRadius:'8px', padding:'10px 12px', marginBottom:'10px', fontSize:'12px' }}>
+          <div style={{ fontWeight:600, color:C.gem, marginBottom:'6px' }}>💎 Paramount mutation 〇 carried by a parent — lock these in</div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+            {mutCarried.map(p => (
+              <span key={p.c} style={{ fontFamily:'var(--font-mono)', fontSize:'11px', background:C.sf, color:C.gem, padding:'2px 6px', borderRadius:'3px', border:'0.5px solid '+C.gem+'55' }}>
+                {p.c} ({p.info.s}) {p.av==='R'||p.av==='x'?'A':''}{(p.av==='R'||p.av==='x')&&(p.bv==='R'||p.bv==='x')?'+':''}{p.bv==='R'||p.bv==='x'?'B':''}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Critical warnings */}
       {critDiluted.length > 0 && (

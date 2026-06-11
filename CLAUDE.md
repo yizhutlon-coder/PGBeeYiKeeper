@@ -142,8 +142,12 @@ Multi-project manager for tracking a sib-cross breeding program.
   Gender prefills from the stable specimen; offspring also take a generation (F1–F8)
 - Recommendations ranked by expected 〇 output, showing clarify/recover/new/mixes pills
 - **Forecast tab** (`components/ForecastView.jsx`): Monte Carlo projection of sib-crossing
-  the project's two parents — generation timeline (avg 〇/gen, 90%/95% thresholds), max
-  achievable, and feasibility flags (diluted crits, "neither parent has it → need 3rd donor").
+  the project's two parents — generation timeline (avg 〇/gen, 90%/95% thresholds),
+  max achievable split by tier (Standard / Critical / Mutation-paramount), a position
+  breakdown (free/need-work/at-risk/impossible over std+crit), and feasibility flags
+  (diluted crits, "neither parent has it → need 3rd donor"). Mutation/orange genes are
+  tracked on their own track — only achievable when a parent already carries one — so they
+  never inflate the std/crit "impossible" count; carried ones get a 💎 highlight.
   Auto-runs on the parents already loaded; no pasting. (Absorbed the old Breeding Plan tool.)
 - Gene map tab showing pool-wide coverage
 - Specimens tab with per-specimen scores
@@ -261,7 +265,7 @@ src/
     storage.js        ← localStorage shim (window.storage-compatible) + loadData/saveData
     theme.js          ← shared color palette (C) + symCol
   components/
-    CoverageMap.jsx   ← Shared chromosome heatmap
+    CoverageMap.jsx   ← Shared chromosome heatmap; click a gene for a per-specimen R/x/D breakdown (parents tagged PA/PB)
     ImportPanel.jsx   ← Shared specimen import: paste an export OR pick from the Calculator stable (pg-v3), with gender + generation dropdowns
     ForecastView.jsx  ← Monte Carlo generation forecast (Planner's Forecast tab)
   Calculator.jsx      ← Main stable manager (pg-v3)
