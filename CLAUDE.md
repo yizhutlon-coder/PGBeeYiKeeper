@@ -137,7 +137,9 @@ Multi-project manager for tracking a sib-cross breeding program.
 **Features:**
 - Multiple projects via project tab bar (click ✎ to rename, × to delete, + to add)
 - Each project: independent parents A+B, offspring pool, recommendations
-- Import offspring with gender + generation selector (F1–F8)
+- Parents and offspring can be added two ways (via `ImportPanel`): paste a genome
+  export, or pick an existing specimen from the Calculator's stable (`pg-v3`).
+  Gender prefills from the stable specimen; offspring also take a generation (F1–F8)
 - Recommendations ranked by expected 〇 output, showing clarify/recover/new/mixes pills
 - **Forecast tab** (`components/ForecastView.jsx`): Monte Carlo projection of sib-crossing
   the project's two parents — generation timeline (avg 〇/gen, 90%/95% thresholds), max
@@ -260,7 +262,7 @@ src/
     theme.js          ← shared color palette (C) + symCol
   components/
     CoverageMap.jsx   ← Shared chromosome heatmap
-    ImportPanel.jsx   ← Shared genome import with gender + generation dropdowns
+    ImportPanel.jsx   ← Shared specimen import: paste an export OR pick from the Calculator stable (pg-v3), with gender + generation dropdowns
     ForecastView.jsx  ← Monte Carlo generation forecast (Planner's Forecast tab)
   Calculator.jsx      ← Main stable manager (pg-v3)
   Planner.jsx         ← Sib-cross multi-project planner (+ Forecast tab)
