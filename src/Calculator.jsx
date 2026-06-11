@@ -4,6 +4,7 @@ import { expR, calcStats, scorePair, getTopPairs, getDelList, getCoverage } from
 import { parseAll } from './lib/parser.js';
 import { storage } from './lib/storage.js';
 import { C } from './lib/theme.js';
+import BulkImport from './components/BulkImport.jsx';
 
 const TAG_COLORS = ['green','yellow','red','purple'];
 const TAG_HEX = { green:'#34D399', yellow:'#FCD34D', red:'#F87171', purple:'#C084FC' };
@@ -29,7 +30,7 @@ function SpecimenGeneMap({ s, cov }) {
     const isNew = stabBest === 'D' && (v === 'R' || v === 'x'); // this specimen has it but stable doesn't elsewhere
 
     if (info.t === 'floor') return { bg:'#0C2A1E', border:'#1A4A30', isGene:true, dim:true };
-    if (info.t === 'orange') return { bg:'#1A1200', border:'#3A2800', isGene:true, dim:true };
+    if (info.t === 'orange') return { bg:'#1A1200', border:C.gem, isGene:true, dim:true, mut:true };
     if (v === 'R') return { bg: isCrit ? '#0C2200' : '#082010', border: isCrit ? '#4A7A00' : '#1A5030', bright:'#34D399', isGene:true, isCrit, isNew };
     if (v === 'x') return { bg:'#1A1200', border:'#5A4000', bright:'#FCD34D', isGene:true, isCrit, isNew };
     return { bg: isCrit ? '#2A0808' : '#0D0F18', border: isCrit ? C.danger : '#1A1E2F', bright: isCrit ? '#7A2020' : null, isGene:true, isCrit };
@@ -43,7 +44,7 @@ function SpecimenGeneMap({ s, cov }) {
         {hovInfo && hovInfo.info
           ? <>
               <span style={{ fontFamily:'var(--font-mono)', color:C.crit, marginRight:'6px' }}>{hovInfo.coord}</span>
-              <span style={{ color:C.mu, marginRight:'6px' }}>{hovInfo.info.s}{hovInfo.info.t==='crit'?' ★':''}</span>
+              <span style={{ color:C.mu, marginRight:'6px' }}>{hovInfo.info.s}{hovInfo.info.v>0?' v:'+hovInfo.info.v:''}{hovInfo.info.t==='crit'?' ★':''}{hovInfo.info.t==='orange'?' 💎':''}</span>
               <span style={{ color: hovInfo.val==='R'?C.std : hovInfo.val==='x'?C.caution : C.dim }}>
                 {SYM[hovInfo.val]} {hovInfo.val==='R'?'〇':hovInfo.val==='x'?'⦿ mixed':'⬤ dominant'}
               </span>
@@ -71,7 +72,7 @@ function SpecimenGeneMap({ s, cov }) {
                         <div key={p}
                           onMouseEnter={() => setHov(coord)}
                           onMouseLeave={() => setHov(null)}
-                          style={{ width:'12px', height:'12px', borderRadius:'2px', background: cs.bright || cs.bg, border:'0.5px solid '+cs.border, flexShrink:0, cursor:'default', opacity: cs.dim ? 0.5 : 1, boxShadow: cs.isNew ? '0 0 0 1.5px '+C.floor+'99' : hov===coord ? '0 0 0 1.5px #fff4' : 'none' }}
+                          style={{ width:'12px', height:'12px', borderRadius:'2px', background: cs.bright || cs.bg, border:(cs.mut?'1px':'0.5px')+' solid '+cs.border, flexShrink:0, cursor:'default', opacity: cs.mut ? 1 : (cs.dim ? 0.5 : 1), boxShadow: cs.isNew ? '0 0 0 1.5px '+C.floor+'99' : hov===coord ? '0 0 0 1.5px #fff4' : 'none' }}
                         />
                       );
                     })}
@@ -106,7 +107,11 @@ function AnalyzeGeneMap({ s, cov }) {
   }
   function cellColor(coord) {
     const info = SG[coord]; if (!info) return null;
-    if (info.t === 'floor' || info.t === 'orange') return { bg:'#0D0F18', border:'#1A1E2F', dot:null };
+    if (info.t === 'floor') return { bg:'#0D0F18', border:'#1A1E2F', dot:null };
+    if (info.t === 'orange') {
+      const ov = s.genome[coord] || 'D';
+      return { bg:'#0D0F18', border:C.gem, dot: ov==='R'?C.gem:ov==='x'?'#FCD34D':null, mut:true };
+    }
     const v = s.genome[coord] || 'D';
     const stabBest = cov[coord]?.best ?? 'D';
     const isCrit = info.t === 'crit' || info.t === 'gem';
@@ -131,7 +136,7 @@ function AnalyzeGeneMap({ s, cov }) {
         {hovCs && hovInfo
           ? <>
               <span style={{ fontFamily:'var(--font-mono)', color:C.crit, marginRight:'6px' }}>{hov}</span>
-              <span style={{ color:C.mu, marginRight:'6px' }}>{hovInfo.s}{hovInfo.t === 'crit' ? ' ★' : ''}</span>
+              <span style={{ color:C.mu, marginRight:'6px' }}>{hovInfo.s}{hovInfo.v>0?' v:'+hovInfo.v:''}{hovInfo.t === 'crit' ? ' ★' : ''}{hovInfo.t === 'orange' ? ' 💎' : ''}</span>
               <span style={{ color: hovCs.dot || C.dim }}>{SYM[hovState] || hovState} </span>
               {hovCs.label && <span style={{ color: hovCs.dot || C.dim, fontSize:'10px' }}>{hovCs.label}</span>}
             </>
@@ -156,7 +161,7 @@ function AnalyzeGeneMap({ s, cov }) {
                       if (!cs) return <div key={p} style={{ width:'12px', height:'12px', borderRadius:'2px', background:'#0D0F18', border:'0.5px solid #1A1E2F', flexShrink:0 }} />;
                       return (
                         <div key={p} onMouseEnter={() => setHov(coord)} onMouseLeave={() => setHov(null)}
-                          style={{ width:'12px', height:'12px', borderRadius:'2px', background:cs.bg, border:'0.5px solid '+cs.border, flexShrink:0, cursor:'default', display:'flex', alignItems:'center', justifyContent:'center',
+                          style={{ width:'12px', height:'12px', borderRadius:'2px', background:cs.bg, border:(cs.mut?'1px':'0.5px')+' solid '+cs.border, flexShrink:0, cursor:'default', display:'flex', alignItems:'center', justifyContent:'center',
                             boxShadow: cs.glow ? '0 0 0 1.5px '+cs.glow+'66' : hov === coord ? '0 0 0 1.5px #fff4' : 'none' }}>
                           {cs.dot && <div style={{ width:'6px', height:'6px', borderRadius:'1px', background:cs.dot }} />}
                         </div>
@@ -198,6 +203,30 @@ function AnalyzeChip({ c, info, col, bg }) {
   );
 }
 
+// Critical genes a specimen carries — 〇 (recessive) and ⦿ (mixed). Used by the
+// "show critical genes" toggle on the Stable and Pairs tabs.
+function CritGeneChips({ s }) {
+  const r = [], x = [];
+  for (const [c, info] of Object.entries(SG)) {
+    if (info.t !== 'crit' && info.t !== 'gem') continue;
+    const v = s.genome[c] || 'D';
+    if (v === 'R') r.push({ c, info });
+    else if (v === 'x') x.push({ c, info });
+  }
+  if (!r.length && !x.length) return <div style={{ fontSize:'10px', color:C.dim, marginTop:'6px' }}>no critical genes</div>;
+  const chip = (c, info, isR) => (
+    <span key={c + (isR ? 'r' : 'x')} style={{ fontFamily:'var(--font-mono)', fontSize:'10px', padding:'1px 5px', borderRadius:'3px', background: isR ? C.critBg : 'transparent', color:C.crit, border:'0.5px solid '+C.crit + (isR ? '88' : '44') }}>
+      {c} <span style={{ opacity:0.75 }}>{info.s}{info.v > 0 ? ' v:'+info.v : ''}</span> {isR ? '〇' : '⦿'}
+    </span>
+  );
+  return (
+    <div style={{ marginTop:'6px', display:'flex', flexWrap:'wrap', gap:'3px' }}>
+      {r.map(({ c, info }) => chip(c, info, true))}
+      {x.map(({ c, info }) => chip(c, info, false))}
+    </div>
+  );
+}
+
 export default function Calculator() {
   const [specimens, setSpecimens] = useState([]);
   const [tags, setTags] = useState({});
@@ -207,6 +236,7 @@ export default function Calculator() {
   const [selectedMale, setSelectedMale] = useState(null);
   const [hoveredGene, setHoveredGene] = useState(null);
   const [selectedGene, setSelectedGene] = useState(null);
+  const [showCrit, setShowCrit] = useState(false);
   const [renamingId, setRenamingId] = useState(null);
   const [renameVal, setRenameVal] = useState('');
   const [deleteCandidate, setDeleteCandidate] = useState(null);
@@ -440,8 +470,14 @@ export default function Calculator() {
       {/* ── STABLE ── */}
       {tab === 'stable' && (
         <div>
+          {specimens.length > 0 && (
+            <label style={{ display:'inline-flex', alignItems:'center', gap:'6px', fontSize:'12px', cursor:'pointer', padding:'5px 10px', borderRadius:'6px', border:'0.5px solid '+(showCrit?C.crit:C.b), background:showCrit?C.critBg:'transparent', color:showCrit?C.crit:C.mu, marginBottom:'12px' }}>
+              <input type="checkbox" checked={showCrit} onChange={e => setShowCrit(e.target.checked)} style={{ margin:0 }} />
+              Show critical genes
+            </label>
+          )}
           {specimens.length === 0
-            ? <p style={{ color:C.mu, fontSize:'14px' }}>No specimens loaded. Use Import to add genome exports.</p>
+            ? <p style={{ color:C.mu, fontSize:'14px' }}>No specimens loaded. Use the Analyze tab to add genome exports.</p>
             : <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(230px, 1fr))', gap:'10px' }}>
                   {specimens.map(s => {
                   const st = calcStats(s);
@@ -487,6 +523,7 @@ export default function Calculator() {
                           {st.mixed > 0 && <Pill label={st.mixed + ' mixed stat genes'} color={C.mixed} bg={C.mixedBg} />}
                         </div>
                       )}
+                      {showCrit && <CritGeneChips s={s} />}
                     </div>
                   );
                 })}
@@ -516,6 +553,13 @@ export default function Calculator() {
           </div>
         );
 
+        const critToggle = (
+          <label style={{ display:'inline-flex', alignItems:'center', gap:'6px', fontSize:'12px', cursor:'pointer', padding:'5px 10px', borderRadius:'6px', border:'0.5px solid '+(showCrit?C.crit:C.b), background:showCrit?C.critBg:'transparent', color:showCrit?C.crit:C.mu, marginBottom:'12px' }}>
+            <input type="checkbox" checked={showCrit} onChange={e => setShowCrit(e.target.checked)} style={{ margin:0 }} />
+            Show critical genes
+          </label>
+        );
+
         if (males.length === 0) return (
           <div>{banner}<p style={{ color:C.mu, fontSize:'14px' }}>No males in stable.</p></div>
         );
@@ -524,6 +568,7 @@ export default function Calculator() {
         if (!selectedMale) return (
           <div>
             {banner}
+            {critToggle}
             <div style={{ fontSize:'12px', color:C.mu, marginBottom:'10px' }}>Select a male to see his pairings</div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:'8px' }}>
               {males.map(m => {
@@ -561,6 +606,7 @@ export default function Calculator() {
                       {females.length === 0 && <span style={{ color:C.danger }}>no females</span>}
                       {newCrit > 0 && <span style={{ color:C.floor }}>+{newCrit} new crit</span>}
                     </div>
+                    {showCrit && <CritGeneChips s={m} />}
                   </div>
                 );
               })}
@@ -587,7 +633,14 @@ export default function Calculator() {
                 <span style={{ color:'#60A5FA', fontWeight:500, fontSize:'14px' }}>♂ {m.name}</span>
               </div>
               <span style={{ fontSize:'12px', color:C.mu }}>{mPairs.length} female{mPairs.length !== 1 ? 's' : ''} available</span>
+              {critToggle}
             </div>
+            {showCrit && (
+              <div style={{ marginBottom:'12px', padding:'8px 10px', background:C.sf, border:'0.5px solid '+C.b, borderRadius:'8px' }}>
+                <div style={{ fontSize:'11px', color:C.mu, marginBottom:'4px', fontWeight:500 }}>♂ {m.name} — critical genes</div>
+                <CritGeneChips s={m} />
+              </div>
+            )}
 
             {mPairs.length === 0
               ? <p style={{ color:C.mu, fontSize:'14px' }}>No females in stable to pair with.</p>
@@ -710,6 +763,7 @@ export default function Calculator() {
                                   </span>
                                 )}
                               </div>
+                              {showCrit && <CritGeneChips s={f} />}
                             </div>
                           </div>
                           <span style={{ color:C.dim, fontSize:'12px', flexShrink:0, marginLeft:'8px' }}>{isExp ? '▲' : '▼'}</span>
@@ -870,8 +924,14 @@ export default function Calculator() {
 
         return (
           <div>
+            <BulkImport onAddMany={specs => {
+              const updated = [...specimens, ...specs];
+              setSpecimens(updated); persist(updated);
+              setTab('stable');
+            }} />
+            <div style={{ borderTop:'0.5px solid '+C.b, margin:'4px 0 14px' }} />
             <p style={{ fontSize:'13px', color:C.mu, margin:'0 0 10px', lineHeight:1.6 }}>
-              Paste a genome export to preview what it contributes to your stable, then add it (with gender) from the bottom of the analysis.
+              Or paste a single genome export to preview what it contributes to your stable, then add it (with gender) from the bottom of the analysis.
             </p>
             <textarea value={analyzeInput} onChange={e => setAnalyzeInput(e.target.value)}
               placeholder={'[Overview]\nFormat=v1.0\nEntity=Specimen Name\n\n[Genes]\n01= RDRD ...'}
@@ -999,11 +1059,11 @@ export default function Calculator() {
           const isCrit = info.t === 'crit' || info.t === 'gem';
           const border = isCrit ? C.crit : info.t==='gem' ? C.gem : C.b;
           if (best === 'floor')  return { bg:'#0C2A1E', border:'#1A4A30', show:true, dim:true };
-          // Orange/paramount: mutation-only — locked (⬤) normally, lights up purple when a 〇 mutation is present
+          // Orange/paramount: mutation-only — always outlined purple to mark it; lights up when a 〇 mutation is present
           if (info.t === 'orange') {
-            if (best === 'R') return { bg:C.gemBg, border:C.gem, show:true, bright:C.gem };
-            if (best === 'x') return { bg:'#1A1200', border:'#5A4000', show:true, bright:'#FCD34D' };
-            return { bg:'#150B00', border:'#3A2800', show:true, dim:true };
+            if (best === 'R') return { bg:C.gemBg, border:C.gem, show:true, bright:C.gem, mut:true };
+            if (best === 'x') return { bg:'#1A1200', border:C.gem, show:true, bright:'#FCD34D', mut:true };
+            return { bg:'#150B00', border:C.gem, show:true, dim:true, mut:true };
           }
           if (best === 'locked') return { bg:'#1A1200', border:'#3A2800', show:true, dim:true };
           if (best === 'R')      return { bg: isCrit ? '#0C2200' : '#082010', border: isCrit ? '#4A7A00' : '#1A5030', show:true, bright:'#34D399' };
@@ -1050,7 +1110,7 @@ export default function Calculator() {
               {hov
                 ? <>
                     <span style={{ fontFamily:'var(--font-mono)', color:C.crit, marginRight:'8px' }}>{hoveredGene}</span>
-                    <span style={{ color:C.mu, marginRight:'8px' }}>{hov.info.s}{(hov.info.t==='crit'||hov.info.t==='gem')?' ★':''}</span>
+                    <span style={{ color:C.mu, marginRight:'8px' }}>{hov.info.s}{hov.info.v>0?' v:'+hov.info.v:''}{(hov.info.t==='crit'||hov.info.t==='gem')?' ★':''}</span>
                     <span style={{ color: hov.best==='R'?C.std : hov.best==='x'?C.caution : hov.best==='floor'?C.floor : hov.best==='locked'?C.mu : C.danger }}>
                       {hov.best==='R'?'〇 Covered':hov.best==='x'?'⦿ In progress (⦿ only)':hov.best==='floor'?'〇 Floor (always recessive)':hov.best==='locked'?'⬤ Locked (orange gene)':'⬤ Missing — no specimen has this gene'}
                     </span>
@@ -1089,7 +1149,7 @@ export default function Calculator() {
                                   onMouseEnter={() => setHoveredGene(coord)}
                                   onMouseLeave={() => setHoveredGene(null)}
                                   onClick={() => setSelectedGene(selectedGene === coord ? null : coord)}
-                                  style={{ width:'13px', height:'13px', borderRadius:'2px', background: cs.bright || cs.bg, border:'0.5px solid '+cs.border, flexShrink:0, cursor:'pointer', transition:'transform 0.05s', boxShadow: selectedGene===coord ? '0 0 0 2px #fff' : hoveredGene===coord ? '0 0 0 1.5px #fff4' : 'none' }}
+                                  style={{ width:'13px', height:'13px', borderRadius:'2px', background: cs.bright || cs.bg, border:(cs.mut?'1px':'0.5px')+' solid '+cs.border, flexShrink:0, cursor:'pointer', transition:'transform 0.05s', boxShadow: selectedGene===coord ? '0 0 0 2px #fff' : hoveredGene===coord ? '0 0 0 1.5px #fff4' : 'none' }}
                                 />
                               );
                             })}
@@ -1154,7 +1214,6 @@ export default function Calculator() {
                 { col:'#F87171', label:'Missing (critical)' },
                 { col:'#7A2020', label:'Missing (standard)' },
                 { col:'#0C2A1E', label:'Floor (always 〇)' },
-                { col:'#1A1200', label:'Locked (orange)' },
               ].map(({ col, label }) => (
                 <div key={label} style={{ display:'flex', alignItems:'center', gap:'5px' }}>
                   <div style={{ width:'11px', height:'11px', borderRadius:'2px', background:col, flexShrink:0 }} />
@@ -1164,6 +1223,10 @@ export default function Calculator() {
               <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
                 <div style={{ width:'11px', height:'11px', borderRadius:'2px', background:'#2A0808', border:'0.5px solid '+C.danger, flexShrink:0 }} />
                 ★ border = critical tier
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
+                <div style={{ width:'11px', height:'11px', borderRadius:'2px', background:'#150B00', border:'1px solid '+C.gem, flexShrink:0 }} />
+                💎 purple outline = mutation (paramount)
               </div>
             </div>
 

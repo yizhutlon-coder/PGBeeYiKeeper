@@ -16,7 +16,7 @@ export default function CoverageMap({ allSpecs }) {
   function cs(coord) {
     const info=SG[coord]; if(!info) return null;
     if(info.t==='floor') return {dot:'#0C4A30',border:'#1A5030'};
-    if(info.t==='orange') return {dot:'#4A2800',border:'#6A3800'};
+    if(info.t==='orange') return {dot:'#4A3A6A',border:C.gem,mut:true};
     const state=cov[coord]||'D', isCrit=info.t==='crit';
     if(state==='R') return {dot:C.std, border:isCrit?C.crit:C.std+'88', bright:true};
     if(state==='x') return {dot:C.caution, border:C.caution+'55'};
@@ -26,7 +26,7 @@ export default function CoverageMap({ allSpecs }) {
   return (
     <div>
       <div style={{minHeight:'22px',marginBottom:'6px',fontSize:'11px',color:C.mu}}>
-        {hov&&hi ? <span><span style={{fontFamily:'var(--font-mono)',color:C.crit}}>{hov}</span><span style={{margin:'0 6px'}}>{hi.s}{hi.t==='crit'?' (crit)':''}</span><span style={{color:symCol(hs)}}>{SYM[hs]} pool best</span></span> : 'Hover for details · click a gene for the per-specimen breakdown'}
+        {hov&&hi ? <span><span style={{fontFamily:'var(--font-mono)',color:C.crit}}>{hov}</span><span style={{margin:'0 6px'}}>{hi.s}{hi.v>0?' v:'+hi.v:''}{hi.t==='crit'?' (crit)':''}{hi.t==='orange'?' 💎 mutation':''}</span><span style={{color:symCol(hs)}}>{SYM[hs]} pool best</span></span> : 'Hover for details · click a gene for the per-specimen breakdown'}
       </div>
       <div style={{overflowX:'auto'}}>
         <div style={{minWidth:'fit-content'}}>
@@ -44,7 +44,7 @@ export default function CoverageMap({ allSpecs }) {
                     return (
                       <div key={p} onMouseEnter={()=>setHov(coord)} onMouseLeave={()=>setHov(null)}
                         onClick={()=>setSel(sel===coord?null:coord)}
-                        style={{width:'12px',height:'12px',borderRadius:'2px',background:C.card,border:'0.5px solid '+cell.border,flexShrink:0,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:sel===coord?'0 0 0 2px #fff':hov===coord?'0 0 0 1.5px #fff4':'none'}}>
+                        style={{width:'12px',height:'12px',borderRadius:'2px',background:C.card,border:(cell.mut?'1px':'0.5px')+' solid '+cell.border,flexShrink:0,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:sel===coord?'0 0 0 2px #fff':hov===coord?'0 0 0 1.5px #fff4':'none'}}>
                         {cell.dot&&<div style={{width:'6px',height:'6px',borderRadius:'1px',background:cell.dot,opacity:cell.bright?1:0.85}}/>}
                       </div>
                     );
@@ -59,6 +59,7 @@ export default function CoverageMap({ allSpecs }) {
         {[['#34D399','Locked (〇 somewhere)'],['#FCD34D','In progress (⦿ only)'],['#3A1010','Missing — crit'],['#1A1A1A','Missing — std']].map(([col,lbl])=>(
           <div key={lbl} style={{display:'flex',alignItems:'center',gap:'4px'}}><div style={{width:'10px',height:'10px',borderRadius:'2px',background:col,flexShrink:0}}/>{lbl}</div>
         ))}
+        <div style={{display:'flex',alignItems:'center',gap:'4px'}}><div style={{width:'10px',height:'10px',borderRadius:'2px',background:'transparent',border:'1px solid '+C.gem,flexShrink:0}}/>💎 mutation (outlined)</div>
       </div>
 
       {sel && SG[sel] && (() => {
