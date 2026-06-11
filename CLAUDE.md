@@ -268,9 +268,10 @@ src/
     CoverageMap.jsx   ← Shared chromosome heatmap; click a gene for a per-specimen R/x/D breakdown (parents tagged PA/PB)
     ImportPanel.jsx   ← Shared specimen import: paste an export OR pick from the Calculator stable (pg-v3), with gender + generation dropdowns
     ForecastView.jsx  ← Monte Carlo generation forecast (Planner's Forecast tab)
+    BackupControls.jsx← Nav "Data ▾" menu: export/import all pg-* localStorage keys as JSON (cross-origin migration + backup)
   Calculator.jsx      ← Main stable manager (pg-v3)
   Planner.jsx         ← Sib-cross multi-project planner (+ Forecast tab)
-  App.jsx             ← Navigation between the two tools
+  App.jsx             ← Navigation between the two tools (+ Data backup/restore)
 ```
 
 ---

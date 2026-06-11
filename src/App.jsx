@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { C } from './lib/theme.js';
 import Calculator from './Calculator.jsx';
 import Planner from './Planner.jsx';
+import BackupControls from './components/BackupControls.jsx';
 
 const TOOLS = [
   { id: 'calculator', label: 'Calculator', desc: 'Stable manager & pairings', Comp: Calculator },
@@ -28,26 +29,29 @@ export default function App() {
 
   return (
     <div>
-      <nav style={{ display:'flex', alignItems:'center', gap:'4px', marginBottom:'12px', flexWrap:'wrap' }}>
-        <span style={{ fontSize:'14px', fontWeight:600, color:C.crit, marginRight:'10px', whiteSpace:'nowrap' }}>
-          🐝 PG Genetics
-        </span>
-        {TOOLS.map(t => {
-          const isActive = t.id === active;
-          return (
-            <button key={t.id} onClick={() => switchTool(t.id)} title={t.desc}
-              style={{
-                padding:'7px 14px', fontSize:'13px', cursor:'pointer', borderRadius:'7px',
-                fontWeight: isActive ? 500 : 400,
-                background: isActive ? C.card : 'transparent',
-                color: isActive ? C.tx : C.mu,
-                border: '0.5px solid ' + (isActive ? C.crit : 'transparent'),
-                whiteSpace:'nowrap', transition:'color 0.1s, background 0.1s',
-              }}>
-              {t.label}
-            </button>
-          );
-        })}
+      <nav style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px', flexWrap:'wrap' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'4px', flexWrap:'wrap', flex:1, minWidth:0 }}>
+          <span style={{ fontSize:'14px', fontWeight:600, color:C.crit, marginRight:'10px', whiteSpace:'nowrap' }}>
+            🐝 PG Genetics
+          </span>
+          {TOOLS.map(t => {
+            const isActive = t.id === active;
+            return (
+              <button key={t.id} onClick={() => switchTool(t.id)} title={t.desc}
+                style={{
+                  padding:'7px 14px', fontSize:'13px', cursor:'pointer', borderRadius:'7px',
+                  fontWeight: isActive ? 500 : 400,
+                  background: isActive ? C.card : 'transparent',
+                  color: isActive ? C.tx : C.mu,
+                  border: '0.5px solid ' + (isActive ? C.crit : 'transparent'),
+                  whiteSpace:'nowrap', transition:'color 0.1s, background 0.1s',
+                }}>
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+        <BackupControls />
       </nav>
       <ToolComp />
     </div>
