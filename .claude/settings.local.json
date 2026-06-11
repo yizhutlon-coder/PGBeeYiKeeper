@@ -18,7 +18,10 @@
       "Bash(node -e \"console.log\\('electron:', require\\('electron/package.json'\\).version\\); console.log\\('electron-builder:', require\\('electron-builder/package.json'\\).version\\)\")",
       "Bash(npx electron-packager *)",
       "Bash(npx --yes @electron/asar list \"release/PG Genetics-win32-x64/resources/app.asar\")",
-      "Bash(awk '{print $5}')"
+      "Bash(awk '{print $5}')",
+      "Bash(cp dist/index.html \"/c/Users/thelo/Downloads/PG-Genetics.html\")",
+      "Read(//c/Users/thelo/Downloads/**)",
+      "Bash(awk '{print $5, $9}')"
     ]
   }
 }
