@@ -27,7 +27,7 @@ The goal is to breed specimens where all stat genes are recessive (〇), which g
 ### Gene tiers (priority order)
 - 💎 **Orange / Paramount** — always dominant in wild, mutation-only. Tracked always. Coords: 01G3, 01I1, 02E2, 03F3, 03G3, 03I2, 03I4, 04A1, 04E2, 04E3
 - 🔴 **Critical (crit)** — CR06–CR09AB, rare, dominant-biased, highest breeding priority. Weight = 3×
-- 🟡 **Standard (std)** — CR01–CR05, CR06A2, CR09C–E. Normal stat genes. Weight = 1×
+- 🟡 **Standard (std)** — CR01–CR05, CR09C–E. Normal stat genes. Weight = 1×
 - 🔵 **Floor** — always recessive, never need to breed for. Ignored in scoring. Coords: 01D3, 03A4, 03B3, 03B4, 03D1, 03D3, 04B2, 04D1, 04D2
 - ⛔ **Orange** — always dominant, mutation only (see paramount above)
 
@@ -43,7 +43,7 @@ This is the single source of truth. All tools import from here. Never duplicate 
 ### Confirmed stat gene values (verified by player)
 Key confirmed values worth noting:
 - `06A1` = T (Toughness) crit v:9 — joint-highest known (tied with 07J1 Ru v:9)
-- `06A2` = V (Versatility) **std** v:7 — was reclassified from crit to std
+- `06A2` = V (Versatility) **crit** v:7 — reclassified std → crit (2026-06-11)
 - `06A3` = Fe (Ferocity) crit v:5
 - `07F3` = Fr (Frost) crit v:3
 - `07I4` = T crit v:4

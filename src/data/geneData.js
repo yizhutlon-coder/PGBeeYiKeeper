@@ -44,7 +44,7 @@ export const SG = {
   '05B1':{s:'I',t:'std',v:4},'05B2':{s:'I',t:'std',v:2},'05B3':{s:'Fr',t:'std',v:3},'05B4':{s:'Fe',t:'std',v:1},
   '05C2':{s:'T',t:'std',v:7},
   // CR06
-  '06A1':{s:'T',t:'crit',v:9},'06A2':{s:'V',t:'std',v:7},'06A3':{s:'Fe',t:'crit',v:5},
+  '06A1':{s:'T',t:'crit',v:9},'06A2':{s:'V',t:'crit',v:7},'06A3':{s:'Fe',t:'crit',v:5},
   '06B1':{s:'Ru',t:'crit',v:2},'06B2':{s:'Fr',t:'crit',v:5},'06B3':{s:'Fe',t:'crit',v:5},'06B4':{s:'T',t:'crit',v:2},
   '06C2':{s:'Ru',t:'crit',v:7},
   // CR07

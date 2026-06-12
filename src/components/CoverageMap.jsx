@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { SG, SYM, CRS, GROUPS } from '../data/geneData.js';
 import { poolCoverage } from '../lib/genetics.js';
-import { C, symCol } from '../lib/theme.js';
+import { C, symCol, statCol, valCol } from '../lib/theme.js';
 
 // ── GENE COVERAGE MAP ─────────────────────────────────────────────────────────
 // Pool-wide chromosome heatmap: best state per position across all specimens.
@@ -26,7 +26,7 @@ export default function CoverageMap({ allSpecs }) {
   return (
     <div>
       <div style={{minHeight:'22px',marginBottom:'6px',fontSize:'11px',color:C.mu}}>
-        {hov&&hi ? <span><span style={{fontFamily:'var(--font-mono)',color:C.crit}}>{hov}</span><span style={{margin:'0 6px'}}>{hi.s}{hi.v>0?' v:'+hi.v:''}{hi.t==='crit'?' (crit)':''}{hi.t==='orange'?' 💎 mutation':''}</span><span style={{color:symCol(hs)}}>{SYM[hs]} pool best</span></span> : 'Hover for details · click a gene for the per-specimen breakdown'}
+        {hov&&hi ? <span><span style={{fontFamily:'var(--font-mono)',color:C.crit}}>{hov}</span><span style={{margin:'0 6px'}}><span style={{color:statCol(hi.s),fontWeight:500}}>{hi.s}</span>{hi.v>0&&<span style={{color:valCol(hi.v),fontWeight:500,marginLeft:'4px'}}>v:{hi.v}</span>}{hi.t==='crit'&&<span style={{color:C.crit}}> (crit)</span>}{hi.t==='orange'&&<span> 💎 mutation</span>}</span><span style={{color:symCol(hs)}}>{SYM[hs]} pool best</span></span> : 'Hover for details · click a gene for the per-specimen breakdown'}
       </div>
       <div style={{overflowX:'auto'}}>
         <div style={{minWidth:'fit-content'}}>

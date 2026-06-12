@@ -3,7 +3,7 @@ import { SG, W, SYM, CRS, GROUPS } from './data/geneData.js';
 import { expR, calcStats, scorePair, getTopPairs, getDelList, getCoverage } from './lib/genetics.js';
 import { parseAll } from './lib/parser.js';
 import { storage } from './lib/storage.js';
-import { C } from './lib/theme.js';
+import { C, statCol, valCol } from './lib/theme.js';
 import BulkImport from './components/BulkImport.jsx';
 
 const TAG_COLORS = ['green','yellow','red','purple'];
@@ -44,7 +44,12 @@ function SpecimenGeneMap({ s, cov }) {
         {hovInfo && hovInfo.info
           ? <>
               <span style={{ fontFamily:'var(--font-mono)', color:C.crit, marginRight:'6px' }}>{hovInfo.coord}</span>
-              <span style={{ color:C.mu, marginRight:'6px' }}>{hovInfo.info.s}{hovInfo.info.v>0?' v:'+hovInfo.info.v:''}{hovInfo.info.t==='crit'?' ★':''}{hovInfo.info.t==='orange'?' 💎':''}</span>
+              <span style={{ marginRight:'6px' }}>
+                <span style={{ color:statCol(hovInfo.info.s), fontWeight:500 }}>{hovInfo.info.s}</span>
+                {hovInfo.info.v>0 && <span style={{ color:valCol(hovInfo.info.v), fontWeight:500, marginLeft:'4px' }}>v:{hovInfo.info.v}</span>}
+                {hovInfo.info.t==='crit' && <span style={{ color:C.crit }}> ★</span>}
+                {hovInfo.info.t==='orange' && <span> 💎</span>}
+              </span>
               <span style={{ color: hovInfo.val==='R'?C.std : hovInfo.val==='x'?C.caution : C.dim }}>
                 {SYM[hovInfo.val]} {hovInfo.val==='R'?'〇':hovInfo.val==='x'?'⦿ mixed':'⬤ dominant'}
               </span>
@@ -136,7 +141,12 @@ function AnalyzeGeneMap({ s, cov }) {
         {hovCs && hovInfo
           ? <>
               <span style={{ fontFamily:'var(--font-mono)', color:C.crit, marginRight:'6px' }}>{hov}</span>
-              <span style={{ color:C.mu, marginRight:'6px' }}>{hovInfo.s}{hovInfo.v>0?' v:'+hovInfo.v:''}{hovInfo.t === 'crit' ? ' ★' : ''}{hovInfo.t === 'orange' ? ' 💎' : ''}</span>
+              <span style={{ marginRight:'6px' }}>
+                <span style={{ color:statCol(hovInfo.s), fontWeight:500 }}>{hovInfo.s}</span>
+                {hovInfo.v>0 && <span style={{ color:valCol(hovInfo.v), fontWeight:500, marginLeft:'4px' }}>v:{hovInfo.v}</span>}
+                {hovInfo.t === 'crit' && <span style={{ color:C.crit }}> ★</span>}
+                {hovInfo.t === 'orange' && <span> 💎</span>}
+              </span>
               <span style={{ color: hovCs.dot || C.dim }}>{SYM[hovState] || hovState} </span>
               {hovCs.label && <span style={{ color: hovCs.dot || C.dim, fontSize:'10px' }}>{hovCs.label}</span>}
             </>
@@ -820,9 +830,9 @@ export default function Calculator() {
           {specimens.length === 0
             ? <p style={{ color:C.mu, fontSize:'14px' }}>No specimens in stable.</p>
             : <>
-                <p style={{ fontSize:'12px', color:C.mu, margin:'0 0 12px', lineHeight:1.6 }}>
-                  Ranked safest to most dangerous to remove. "Danger" = holds critical genes found nowhere else in your stable.
-                  Specimens not in the current pair recommendations are flagged — they contribute less to active breeding, strengthening the case for deletion. Note: a specimen may be absent simply because better options claimed their partners first.
+                <p style={{ fontSize:'12px', color:C.floor, margin:'0 0 12px', lineHeight:1.7 }}>
+                  Specimens are ordered safest → riskiest to remove. Click the × on any specimen to attempt removal — you'll first see a detailed breakdown of exactly what would be lost from the gene pool before you confirm.
+                  The four colored buttons tag a specimen: that color then marks it across every other tab (Stable, Pairs, Gene Map), so you can keep track of bloodlines or flag any specimen worth special note.
                 </p>
                 <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                   {delList.map(({ s, critR, uniq, score, risk, isOnly }) => {
@@ -1110,7 +1120,11 @@ export default function Calculator() {
               {hov
                 ? <>
                     <span style={{ fontFamily:'var(--font-mono)', color:C.crit, marginRight:'8px' }}>{hoveredGene}</span>
-                    <span style={{ color:C.mu, marginRight:'8px' }}>{hov.info.s}{hov.info.v>0?' v:'+hov.info.v:''}{(hov.info.t==='crit'||hov.info.t==='gem')?' ★':''}</span>
+                    <span style={{ marginRight:'8px' }}>
+                      <span style={{ color:statCol(hov.info.s), fontWeight:500 }}>{hov.info.s}</span>
+                      {hov.info.v>0 && <span style={{ color:valCol(hov.info.v), fontWeight:500, marginLeft:'4px' }}>v:{hov.info.v}</span>}
+                      {(hov.info.t==='crit'||hov.info.t==='gem') && <span style={{ color:C.crit }}> ★</span>}
+                    </span>
                     <span style={{ color: hov.best==='R'?C.std : hov.best==='x'?C.caution : hov.best==='floor'?C.floor : hov.best==='locked'?C.mu : C.danger }}>
                       {hov.best==='R'?'〇 Covered':hov.best==='x'?'⦿ In progress (⦿ only)':hov.best==='floor'?'〇 Floor (always recessive)':hov.best==='locked'?'⬤ Locked (orange gene)':'⬤ Missing — no specimen has this gene'}
                     </span>
