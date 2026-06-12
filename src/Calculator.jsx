@@ -237,6 +237,36 @@ function CritGeneChips({ s }) {
   );
 }
 
+// One cross-outcome tally chip (e.g. "R+M ×5 · 50% 〇").
+function CrossChip({ label, n, sub, col }) {
+  if (!n) return null;
+  return (
+    <span title={sub} style={{ fontSize:'11px', padding:'2px 7px', borderRadius:'4px', background:col+'1F', color:col, border:'0.5px solid '+col+'55', whiteSpace:'nowrap' }}>
+      <span style={{ fontFamily:'var(--font-mono)', fontWeight:600 }}>{label}</span> ×{n} <span style={{ opacity:0.8 }}>{sub}</span>
+    </span>
+  );
+}
+
+// Row of cross-outcome tallies for a pairing (parents' state combinations).
+function CrossBreakdown({ cross }) {
+  const items = [
+    ['R+R', cross.rr, '100% 〇', C.std],
+    ['R+M', cross.rm, '50% 〇',  C.floor],
+    ['M+M', cross.mm, '25% 〇',  C.caution],
+    ['R+D', cross.rd, 'dilutes 〇→⦿', C.danger],
+    ['M+D', cross.md, '50% lost', C.mixed],
+  ];
+  if (!items.some(([, n]) => n > 0)) return null;
+  return (
+    <div style={{ marginTop:'6px' }}>
+      <div style={{ fontSize:'10px', color:C.dim, marginBottom:'3px' }}>Cross outcomes per stat gene</div>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+        {items.map(([label, n, sub, col]) => <CrossChip key={label} label={label} n={n} sub={sub} col={col} />)}
+      </div>
+    </div>
+  );
+}
+
 export default function Calculator() {
   const [specimens, setSpecimens] = useState([]);
   const [tags, setTags] = useState({});
@@ -708,6 +738,23 @@ export default function Calculator() {
                       return (m.genome[c]||'D') === 'R' && (f.genome[c]||'D') === 'D';
                     }).length;
 
+                    // ── Cross-outcome breakdown: classify every stat position by the
+                    // two parents' states and tally each combination ──
+                    const cross = (() => {
+                      let rr=0, rm=0, mm=0, rd=0, md=0;
+                      for (const [c, info] of Object.entries(SG)) {
+                        if (info.t === 'floor') continue;
+                        const ms = m.genome[c]||'D', fs = f.genome[c]||'D';
+                        const both = (a,b) => (ms===a&&fs===b)||(ms===b&&fs===a);
+                        if (ms==='R'&&fs==='R') rr++;
+                        else if (both('R','x')) rm++;
+                        else if (ms==='x'&&fs==='x') mm++;
+                        else if (both('R','D')) rd++;
+                        else if (both('x','D')) md++;
+                      }
+                      return { rr, rm, mm, rd, md };
+                    })();
+
                     const detail = isExp ? Object.entries(SG)
                       .filter(([c, info]) => {
                         if (info.t === 'floor') return false;
@@ -773,6 +820,7 @@ export default function Calculator() {
                                   </span>
                                 )}
                               </div>
+                              <CrossBreakdown cross={cross} />
                               {showCrit && <CritGeneChips s={f} />}
                             </div>
                           </div>
