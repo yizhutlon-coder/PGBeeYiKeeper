@@ -354,7 +354,7 @@ export default function Calculator() {
   const males = specimens.filter(s => s.gender === 'male');
   const females = specimens.filter(s => s.gender === 'female');
   const { cov, critTotal, critCov, critProg, stdTotal, stdCov, stdProg, mutTotal, mutCov, mutProg } = getCoverage(specimens);
-  const pairs = getTopPairs(specimens, expand, cov);
+  const pairs = getTopPairs(specimens, false, cov);
   // A specimen is "paired" if it has at least one valid partner of the opposite gender
   const hasMales = males.length > 0;
   const hasFemales = females.length > 0;
@@ -594,10 +594,12 @@ export default function Calculator() {
       {tab === 'pairings' && (() => {
         const females = specimens.filter(s => s.gender === 'female');
 
-        // All pairings for a given male, sorted by score
+        // All pairings for a given male, sorted by score.
+        // Score always uses the clarification calculation — Detailed cross mode
+        // only reveals the breakdown boxes; it never changes the ranking.
         function malePairings(m) {
           return females.map(f => ({
-            m, f, score: scorePair(m, f, expand, cov)
+            m, f, score: scorePair(m, f, false, cov)
           })).sort((a,b) => b.score - a.score);
         }
 
