@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "electron:dev": "vite build && electron .",
-    "build:exe": "vite build && electron-packager . \"PG Genetics\" --platform=win32 --arch=x64 --out=release --overwrite --ignore=\"^/src\" --ignore=\"^/release\" --ignore=\"^/node_modules\" --ignore=\"^/\\.git\" --ignore=\"^/\\.claude\" --ignore=\"\\.(md|map)$\"",
+    "build:exe": "vite build && electron-packager . \"PGBeeYiKeeper\" --platform=win32 --arch=x64 --out=release --overwrite --ignore=\"^/src\" --ignore=\"^/release\" --ignore=\"^/node_modules\" --ignore=\"^/\\.git\" --ignore=\"^/\\.claude\" --ignore=\"\\.(md|map)$\"",
     "build:exe-portable": "vite build && electron-builder --win portable"
   },
   "dependencies": {
@@ -26,7 +26,7 @@
   },
   "build": {
     "appId": "com.gorgongenetics.pg",
-    "productName": "PG Genetics",
+    "productName": "PGBeeYiKeeper",
     "directories": {
       "output": "release"
     },

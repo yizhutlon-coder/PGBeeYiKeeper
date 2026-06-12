@@ -53,11 +53,11 @@ export default function BackupControls() {
         const parsed = JSON.parse(ev.target.result);
         const data = parsed && parsed.data ? parsed.data : parsed;
         const keys = Object.keys(data || {}).filter(k => k.startsWith('pg-'));
-        if (!keys.length) { setErr('That file has no PG Genetics data.'); setMsg(''); return; }
+        if (!keys.length) { setErr('That file has no PGBeeYiKeeper data.'); setMsg(''); return; }
         const clean = {};
         for (const k of keys) clean[k] = typeof data[k] === 'string' ? data[k] : JSON.stringify(data[k]);
         setErr(''); setMsg(''); setPending({ data: clean, counts: counts(clean) });
-      } catch { setErr('Could not read that file — is it a PG Genetics backup?'); setMsg(''); }
+      } catch { setErr('Could not read that file — is it a PGBeeYiKeeper backup?'); setMsg(''); }
     };
     reader.readAsText(file);
   }

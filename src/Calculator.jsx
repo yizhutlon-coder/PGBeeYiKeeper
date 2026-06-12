@@ -503,9 +503,9 @@ export default function Calculator() {
       <div style={{ background:C.bg, fontFamily:'var(--font-sans)', color:C.tx, padding:'16px', borderRadius:'12px' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px', flexWrap:'wrap', gap:'8px' }}>
         <div>
-          <span style={{ fontSize:'15px', fontWeight:500, letterSpacing:'0.01em' }}>PG Genetics</span>
+          <span style={{ fontSize:'15px', fontWeight:500, letterSpacing:'0.01em' }}>Stable</span>
           <span style={{ fontSize:'12px', color:C.mu, marginLeft:'10px' }}>
-            {specimens.length} in stable &middot; {males.length}♂ {females.length}♀
+            {specimens.length} specimens &middot; {males.length}♂ {females.length}♀
           </span>
           {saved && <span style={{ fontSize:'12px', color:C.std, marginLeft:'8px' }}>✓ saved</span>}
         </div>
@@ -1011,7 +1011,7 @@ export default function Calculator() {
             }} />
             <div style={{ borderTop:'0.5px solid '+C.b, margin:'4px 0 14px' }} />
             <p style={{ fontSize:'13px', color:C.mu, margin:'0 0 10px', lineHeight:1.6 }}>
-              Or paste a single genome export to preview what it contributes to your stable, then add it (with gender) from the bottom of the analysis.
+              When scouting out bees, paste a single genome export here to get a detailed breakdown of how that specimen's genetics might affect your overall gene pool — then add it (with gender) from the bottom of the analysis if you want to keep it.
             </p>
             <textarea value={analyzeInput} onChange={e => setAnalyzeInput(e.target.value)}
               placeholder={'[Overview]\nFormat=v1.0\nEntity=Specimen Name\n\n[Genes]\n01= RDRD ...'}

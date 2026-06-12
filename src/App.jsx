@@ -29,11 +29,12 @@ export default function App() {
 
   return (
     <div>
+      <div style={{ display:'flex', alignItems:'baseline', gap:'10px', flexWrap:'wrap', marginBottom:'10px' }}>
+        <span style={{ fontSize:'18px', fontWeight:600, color:C.crit, whiteSpace:'nowrap' }}>🐝 PGBeeYiKeeper</span>
+        <span style={{ fontSize:'12px', color:C.mu }}>Tool to help you create the perfect Combat Bee in Project Gorgon</span>
+      </div>
       <nav style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px', flexWrap:'wrap' }}>
         <div style={{ display:'flex', alignItems:'center', gap:'4px', flexWrap:'wrap', flex:1, minWidth:0 }}>
-          <span style={{ fontSize:'14px', fontWeight:600, color:C.crit, marginRight:'10px', whiteSpace:'nowrap' }}>
-            🐝 PG Genetics
-          </span>
           {TOOLS.map(t => {
             const isActive = t.id === active;
             return (
