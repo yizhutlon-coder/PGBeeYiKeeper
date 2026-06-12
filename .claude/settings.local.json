@@ -22,7 +22,9 @@
       "Bash(cp dist/index.html \"/c/Users/thelo/Downloads/PG-Genetics.html\")",
       "Read(//c/Users/thelo/Downloads/**)",
       "Bash(awk '{print $5, $9}')",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(git remote *)",
+      "Bash(git push *)"
     ]
   }
 }
