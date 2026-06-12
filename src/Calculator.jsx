@@ -247,22 +247,40 @@ function CrossChip({ label, n, sub, col }) {
   );
 }
 
-// Row of cross-outcome tallies for a pairing (parents' state combinations).
-function CrossBreakdown({ cross }) {
-  const items = [
-    ['R+R', cross.rr, '100% 〇', C.std],
-    ['R+M', cross.rm, '50% 〇',  '#F9A8D4'],   // light pink — half the offspring slip to ⦿
-    ['M+M', cross.mm, '25% 〇',  C.caution],
-    ['R+D', cross.rd, 'dilutes 〇→⦿', '#F2589B'],  // deeper redder pink
-    ['M+D', cross.md, '50% lost', '#F2415F'],  // reddest pink — risks losing the gene
-  ];
+// Cross-outcome tallies for a pairing, split by which gender holds each allele.
+const PINK_RM = '#F9A8D4', PINK_RD = '#F2589B', PINK_MD = '#F2415F';
+function CrossRow({ label, labelCol, items }) {
   if (!items.some(([, n]) => n > 0)) return null;
   return (
+    <div style={{ display:'flex', alignItems:'center', gap:'5px', flexWrap:'wrap', marginTop:'3px' }}>
+      <span style={{ fontSize:'10px', color:labelCol, fontWeight:600, width:'48px', flexShrink:0 }}>{label}</span>
+      {items.map(([l, n, sub, col]) => <CrossChip key={label+l} label={l} n={n} sub={sub} col={col} />)}
+    </div>
+  );
+}
+function CrossBreakdown({ cross }) {
+  const shared = [
+    ['R+R', cross.rr, '100% 〇', C.std],
+    ['M+M', cross.mm, '25% 〇',  C.caution],
+  ];
+  const male = [
+    ['R+M', cross.rmM, '50% 〇',          PINK_RM],
+    ['R+D', cross.rdM, 'dilutes his 〇',  PINK_RD],
+    ['M+D', cross.mdM, '50% lost',        PINK_MD],
+  ];
+  const female = [
+    ['R+M', cross.rmF, 'clarifies · 50% 〇', PINK_RM],
+    ['R+D', cross.rdF, 'fold-in (all ⦿)',    PINK_RD],
+    ['M+D', cross.mdF, 'fold-in · 50% lost', PINK_MD],
+  ];
+  const any = [...shared, ...male, ...female].some(([, n]) => n > 0);
+  if (!any) return null;
+  return (
     <div style={{ marginTop:'6px' }}>
-      <div style={{ fontSize:'10px', color:C.dim, marginBottom:'3px' }}>Cross outcomes per stat gene</div>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
-        {items.map(([label, n, sub, col]) => <CrossChip key={label} label={label} n={n} sub={sub} col={col} />)}
-      </div>
+      <div style={{ fontSize:'10px', color:C.dim, marginBottom:'2px' }}>Cross outcomes per stat gene</div>
+      <CrossRow label="Both" labelCol={C.mu} items={shared} />
+      <CrossRow label="♂ male" labelCol={C.male} items={male} />
+      <CrossRow label="♀ female" labelCol={C.female} items={female} />
     </div>
   );
 }
@@ -494,7 +512,7 @@ export default function Calculator() {
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
           <label style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px', cursor:'pointer', padding:'5px 10px', borderRadius:'6px', border:'0.5px solid '+(expand?C.floor:C.b), background:expand?C.floorBg:'transparent', color:expand?C.floor:C.mu }}>
             <input type="checkbox" checked={expand} onChange={e => setExpand(e.target.checked)} style={{ margin:0 }} />
-            Expansion mode
+            Detailed cross mode
           </label>
         </div>
       </div>
@@ -587,8 +605,8 @@ export default function Calculator() {
         const banner = (
           <div style={{ marginBottom:'12px', padding:'8px 12px', borderRadius:'7px', background: expand ? C.floorBg : C.sf, border:'0.5px solid '+(expand ? C.floor : C.b), fontSize:'12px', color: expand ? C.floor : C.mu, lineHeight:1.6 }}>
             {expand
-              ? <><strong style={{ color:C.floor }}>Expansion mode:</strong> Females ranked by genes they can introduce to this male specifically. Fold-in candidates rank highest.</>
-              : <><strong style={{ color:C.mu }}>Clarification mode:</strong> Females ranked by expected recessive output in offspring. Best for cleaning up a known-good line.</>
+              ? <><strong style={{ color:C.floor }}>Detailed cross mode:</strong> Each pairing breaks down — per gender — how its mix would play out gene by gene, i.e. how much <em>messier</em> it would make the line (the R+R / R+M / R+D / M+D boxes). Click any box to expand the full per-gene detail.</>
+              : <><strong style={{ color:C.mu }}>Clarification mode:</strong> Females ranked by expected 〇 output — this is for <em>clarifying</em>, i.e. cleaning up the bloodline as fast as possible so the line is easier to plan crosses around. It is not for chasing the highest-stat outcome.</>
             }
           </div>
         );
@@ -739,20 +757,22 @@ export default function Calculator() {
                     }).length;
 
                     // ── Cross-outcome breakdown: classify every stat position by the
-                    // two parents' states and tally each combination ──
+                    // two parents' states, split by which gender holds each allele ──
                     const cross = (() => {
-                      let rr=0, rm=0, mm=0, rd=0, md=0;
+                      let rr=0, mm=0, rmM=0, rmF=0, rdM=0, rdF=0, mdM=0, mdF=0;
                       for (const [c, info] of Object.entries(SG)) {
                         if (info.t === 'floor') continue;
                         const ms = m.genome[c]||'D', fs = f.genome[c]||'D';
-                        const both = (a,b) => (ms===a&&fs===b)||(ms===b&&fs===a);
                         if (ms==='R'&&fs==='R') rr++;
-                        else if (both('R','x')) rm++;
                         else if (ms==='x'&&fs==='x') mm++;
-                        else if (both('R','D')) rd++;
-                        else if (both('x','D')) md++;
+                        else if (ms==='R'&&fs==='x') rmM++;   // male holds the 〇
+                        else if (ms==='x'&&fs==='R') rmF++;   // female holds the 〇
+                        else if (ms==='R'&&fs==='D') rdM++;   // male's 〇 gets diluted
+                        else if (ms==='D'&&fs==='R') rdF++;   // female folds in a gene he lacks
+                        else if (ms==='x'&&fs==='D') mdM++;   // male's ⦿ at risk
+                        else if (ms==='D'&&fs==='x') mdF++;   // female's ⦿ at risk
                       }
-                      return { rr, rm, mm, rd, md };
+                      return { rr, mm, rmM, rmF, rdM, rdF, mdM, mdF };
                     })();
 
                     const detail = isExp ? Object.entries(SG)
@@ -820,7 +840,7 @@ export default function Calculator() {
                                   </span>
                                 )}
                               </div>
-                              <CrossBreakdown cross={cross} />
+                              {expand && <CrossBreakdown cross={cross} />}
                               {showCrit && <CritGeneChips s={f} />}
                             </div>
                           </div>
