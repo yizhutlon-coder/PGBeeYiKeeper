@@ -242,7 +242,7 @@ function CrossChip({ label, n, sub, col }) {
   if (!n) return null;
   return (
     <span title={sub} style={{ fontSize:'11px', padding:'2px 7px', borderRadius:'4px', background:col+'1F', color:col, border:'0.5px solid '+col+'55', whiteSpace:'nowrap' }}>
-      <span style={{ fontFamily:'var(--font-mono)', fontWeight:600 }}>{label}</span> ×{n} <span style={{ opacity:0.8 }}>{sub}</span>
+      <span style={{ fontFamily:'var(--font-mono)', fontWeight:600 }}>{label}</span> ×<span style={{ fontWeight:700, fontSize:'12px' }}>{n}</span> <span style={{ opacity:0.8 }}>{sub}</span>
     </span>
   );
 }
@@ -251,10 +251,10 @@ function CrossChip({ label, n, sub, col }) {
 function CrossBreakdown({ cross }) {
   const items = [
     ['R+R', cross.rr, '100% 〇', C.std],
-    ['R+M', cross.rm, '50% 〇',  C.floor],
+    ['R+M', cross.rm, '50% 〇',  '#F9A8D4'],   // light pink — half the offspring slip to ⦿
     ['M+M', cross.mm, '25% 〇',  C.caution],
-    ['R+D', cross.rd, 'dilutes 〇→⦿', C.danger],
-    ['M+D', cross.md, '50% lost', C.mixed],
+    ['R+D', cross.rd, 'dilutes 〇→⦿', '#F2589B'],  // deeper redder pink
+    ['M+D', cross.md, '50% lost', '#F2415F'],  // reddest pink — risks losing the gene
   ];
   if (!items.some(([, n]) => n > 0)) return null;
   return (
