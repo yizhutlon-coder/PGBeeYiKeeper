@@ -5,6 +5,11 @@ A suite of React tools for breeding arthropods (bees/wasps) in the game Project 
 The player (ThatYiGuy) has MAX Genetics skill, meaning they can read exact genome states.
 The goal is to breed specimens where all stat genes are recessive (〇), which gives stat bonuses.
 
+**Branded "PGBeeYiKeeper"** — tagline "Tool to help you create the perfect Combat Bee in Project
+Gorgon." Live at https://yizhutlon-coder.github.io/PGBeeYiKeeper/ (auto-deploys on push to `main`).
+Vite + React, 100% client-side (all data in `localStorage`), no backend. See **Deployment &
+Distribution** and **Current status / handoff** at the bottom.
+
 ---
 
 ## The Genetics System
@@ -115,17 +120,35 @@ Genome=BeeWasp
 ## Tool Architecture
 
 ### Tool 1: Main Calculator (`Calculator.jsx`)
-**Tabs:** Import | Stable | Pairs | Manage | Gene Map | Analyze
+**Tabs:** Analyze | Stable | Pairs | Manage | Gene Map  *(Analyze is the default/first tab; the old Import tab was removed — Analyze absorbed it.)*
 
 **Key features:**
-- Import: two-step (paste → parse → gender dropdown per specimen)
-- Stable: specimen cards with inline rename, delete with confirmation modal
-- Pairs: male-first browsing — click a male to see all females ranked. Each female shows 4 pills: clarifies N, fold-in N crit+std, mixes N, +N new to pool
-- Manage: deletion recommendations, color tag system (4 colors), "not paired" badge
-- Gene Map: chromosome heatmap CR01–CR09
-- Analyze: paste genome to preview vs stable without adding; gender dropdown before adding
+- **Analyze:** two ways to add specimens. (a) Bulk — drag/drop or choose multiple `.txt`
+  exports (`BulkImport.jsx`), each file may hold several `[Overview]` blocks → set a gender per
+  specimen → "Add all to stable". (b) Single — paste one export for a "scouting" contribution
+  preview vs the stable, then add with gender. Skips orange in the analysis but shows a 💎
+  mutation stat box when present.
+- **Stable:** specimen cards (Score, Crit 〇, Std 〇; a 💎 paramount-mutation pill and a mixed-genes
+  pill when present), inline rename, delete → a loss-preview modal, 4-color tags. A **"Show
+  critical genes" toggle** reveals each specimen's crit genes as chips.
+- **Pairs:** male-first — click a male to see females ranked by clarification score. Strategy pills:
+  clarifies / fold-in / mixes / +new-to-pool. A **"Detailed cross mode" toggle** (renamed from the
+  old "Expansion mode") reveals a **gender-split cross-outcome breakdown** per pairing — a *Both*
+  row (R+R, M+M) plus **♂ male / ♀ female** rows of R+M / R+D / M+D, colored on a pink→red cost
+  gradient (`♂ R+D` = his clean gene diluted; `♀ R+D` = fold-in). Click any box to expand the
+  per-gene detail. **Detailed cross mode is informational only — it NEVER changes the score/ranking**
+  (both `getTopPairs` and `malePairings` always call `scorePair(..., false, ...)`).
+- **Manage:** deletion-safety ranking; the 4 color tags color-code a specimen across *all* tabs
+  (Stable/Pairs/Gene Map). Removing a specimen previews exactly what would be lost from the pool.
+- **Gene Map:** chromosome heatmap CR01–CR09. Hover shows the stat (colored per-stat via `statCol`)
+  + value (colored by magnitude via `valCol`) + tier; **mutation/orange genes are outlined purple**;
+  click a gene → a per-specimen 〇/⦿/⬤ breakdown box.
 
-**Storage key:** `pg-v3` (localStorage)
+**Mutation (orange/paramount) tracking:** `calcStats` returns `mutR` and `getCoverage` returns
+`mutTotal/mutCov/mutProg` (orange split out of the Standard counts — Standard total is now 64, not
+75). Surfaced as 💎 across Stable, Pairs, Manage, Analyze, and Gene Map.
+
+**Storage key:** `pg-v3` (localStorage).
 
 **pairedIds logic:** A specimen is "paired" if it has at least one valid partner of opposite gender in the stable. No cooldown restrictions.
 
@@ -263,15 +286,18 @@ src/
     genetics.js       ← expR, calcStats, scorePair, getTopPairs, getDelList, getCoverage, scorePairPool, specimenScore, poolCoverage, classifyPosition, f1ProbR, f1ProbX, simulate
     parser.js         ← parseExport, parseAll, parseGenome
     storage.js        ← localStorage shim (window.storage-compatible) + loadData/saveData
-    theme.js          ← shared color palette (C) + symCol
+    theme.js          ← shared palette (C) + symCol + statCol (per-stat hue) + valCol (value magnitude)
   components/
     CoverageMap.jsx   ← Shared chromosome heatmap; click a gene for a per-specimen R/x/D breakdown (parents tagged PA/PB)
-    ImportPanel.jsx   ← Shared specimen import: paste an export OR pick from the Calculator stable (pg-v3), with gender + generation dropdowns
+    ImportPanel.jsx   ← Shared single import (Planner): paste an export OR pick from the Calculator stable (pg-v3), with gender + generation
+    BulkImport.jsx    ← Calculator Analyze tab: drag/drop or choose many .txt exports → per-specimen gender → add all
     ForecastView.jsx  ← Monte Carlo generation forecast (Planner's Forecast tab)
     BackupControls.jsx← Nav "Data ▾" menu: export/import all pg-* localStorage keys as JSON (cross-origin migration + backup)
   Calculator.jsx      ← Main stable manager (pg-v3)
   Planner.jsx         ← Sib-cross multi-project planner (+ Forecast tab)
-  App.jsx             ← Navigation between the two tools (+ Data backup/restore)
+  App.jsx             ← Nav (brand "🐝 PGBeeYiKeeper" + tagline) between the two tools (+ Data backup/restore)
+electron/main.cjs     ← Electron main process (loads dist/index.html for the desktop exe)
+.github/workflows/deploy.yml ← builds + publishes dist/ to GitHub Pages on push to main
 ```
 
 ---
@@ -279,8 +305,57 @@ src/
 ## Commands
 
 ```bash
-npm run dev        # Start dev server (Vite)
-npm run build      # Production build
+npm run dev            # Start dev server (Vite, port 5173)
+npm run build          # Production build → dist/index.html (SINGLE self-contained file,
+                       #   via vite-plugin-singlefile + base:'./' — everything inlined)
+npm run build:exe      # Build + package a Windows app folder via electron-packager
+                       #   → release/PGBeeYiKeeper-win32-x64/PGBeeYiKeeper.exe
+npm run build:exe-portable  # Single portable .exe via electron-builder (needs Windows Dev Mode / admin)
+npm run electron:dev   # Build + run the Electron app locally
 ```
 
 When making changes to geneData.js, both tools pick up the update automatically via imports.
+
+---
+
+## Deployment & Distribution
+
+**Live site (GitHub Pages):** https://yizhutlon-coder.github.io/PGBeeYiKeeper/
+- Remote: `origin` = https://github.com/yizhutlon-coder/PGBeeYiKeeper.git . Working branch is **`main`**.
+- **The deploy loop:** commit → `git push` → `.github/workflows/deploy.yml` builds and publishes
+  `dist/` to Pages → live in ~1–2 min. That's the whole thing; no manual build/upload.
+- Pages source must be set to **"GitHub Actions"** in repo Settings → Pages (one-time, done in the UI).
+- `base: './'` + single-file build means the Pages subpath "just works"; no config changes needed.
+
+**Offline distribution** (frozen snapshots, separate origins from the live site):
+- Standalone HTML — `dist/index.html` (the player keeps copies in Downloads, e.g.
+  `PGBeeYiKeeper-Version1.1.html`). Chrome/Edge persist `file://` localStorage reliably; Firefox flaky.
+- Electron `.exe` — `release/PGBeeYiKeeper-win32-x64/`.
+
+## Data safety (IMPORTANT for testing)
+- All state is `localStorage`, **per-origin** — the live site, each standalone HTML, the exe, and the
+  dev server are all separate stores. **Data ▾ → Export/Import** moves data between them; there is no
+  cross-device/cross-origin sync (no backend).
+- **The Claude Preview MCP browser is ephemeral** — its `localStorage` for `localhost:5173` gets
+  cleared when the preview server restarts. It is NOT the player's real browser. Do not assume data
+  seen there persists across sessions.
+- **Committed disk backup:** `pg-genetics-backup-2026-06-11.json` (repo root, commit `e4716fe`) holds
+  the player's 12-specimen stable + planner. To restore into a preview for representative testing:
+  copy it to `public/restore.json`, `fetch('/restore.json')` in-page, write the `pg-*` keys, reload,
+  then delete `public/`. Always back up `pg-v3` to a temp key before any mutating test.
+
+---
+
+## Current status / handoff (end of 2026-06-11 session)
+- **Deployed & branded.** App is renamed **PGBeeYiKeeper**, live on GitHub Pages, auto-deploying on push.
+- **Recent feature work (all committed):** bulk multi-file import; "Show critical genes" toggle
+  (Stable + Pairs); hover stat/value coloring + mutation outlines on all gene maps; Pairs
+  cross-outcome breakdown (gender-split, pink→red cost gradient) behind the renamed **Detailed cross
+  mode** (informational only — never alters the score); `06A2` reclassified std→crit; Manage-tab
+  intro rewritten (light blue) to explain remove-to-preview + the color tags; Data backup/restore.
+- **Next up (open):** a **visual design pass**. A full design brief + 3 annotated screenshots
+  (Stable / Pairs-detailed / Gene-Map) were prepared to hand to a design-focused Claude. Goal:
+  consistent type scale, unified card/pill spec, spacing rhythm, stronger hierarchy — staying dark +
+  dense. Styling is currently all inline `style={{}}` + the shared `C` token object (no CSS framework);
+  a design pass may recommend introducing a lightweight CSS approach.
+- No test suite exists; verification is via `npm run build` + the Claude Preview MCP.
