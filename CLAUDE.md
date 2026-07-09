@@ -129,17 +129,26 @@ Genome=BeeWasp
   preview vs the stable, then add with gender. Skips orange in the analysis but shows a 💎
   mutation stat box when present.
 - **Stable:** specimen cards (Score, Crit 〇, Std 〇; a 💎 paramount-mutation pill and a mixed-genes
-  pill when present), inline rename, delete → a loss-preview modal, 4-color tags. A **"Show
-  critical genes" toggle** reveals each specimen's crit genes as chips.
-- **Pairs:** male-first — click a male to see females ranked by clarification score. Strategy pills:
-  clarifies / fold-in / mixes / +new-to-pool. A **"Detailed cross mode" toggle** (renamed from the
-  old "Expansion mode") reveals a **gender-split cross-outcome breakdown** per pairing — a *Both*
-  row (R+R, M+M) plus **♂ male / ♀ female** rows of R+M / R+D / M+D, colored on a pink→red cost
-  gradient (`♂ R+D` = his clean gene diluted; `♀ R+D` = fold-in). Click any box to expand the
-  per-gene detail. **Detailed cross mode is informational only — it NEVER changes the score/ranking**
-  (both `getTopPairs` and `malePairings` always call `scorePair(..., false, ...)`).
-- **Manage:** deletion-safety ranking; the 4 color tags color-code a specimen across *all* tabs
-  (Stable/Pairs/Gene Map). Removing a specimen previews exactly what would be lost from the pool.
+  pill when present), inline rename, delete → a loss-preview modal. A **"Show critical genes" toggle**
+  reveals each specimen's crit genes as chips. **Folders + drag-reorder:** cards are draggable to
+  reorder (reorders the shared `pg-v3` array) or to drop into **collapsible folder sections**
+  (▾/▸, live count, inline rename, delete → items fall to Unfiled). "📁 New folder" creates one; an
+  Unfiled section (orphan-safe — catches any unknown folderId) holds the rest.
+- **Color is a folder property** (moved off individual specimens): each folder header has the 4-color
+  picker; every card in a colored folder inherits that color as its border + a `📁 <folder>` **tag
+  that shows across all tabs** (Pairs male cards + female rows, Manage rows). `specColor(s)` resolves
+  folder color → **legacy per-specimen `pg-tags-v1` fallback** (read-only `LEGACY-COMPAT`, flagged to
+  retire — kept only so pre-folder live users don't lose old colors) → none.
+- **Pairs:** male-first — click a male to see females ranked by clarification score. Male cards are
+  **drag-reorderable** (shared order; `keepFolder` so it never refolders them); females stay ranked.
+  Strategy pills: clarifies / fold-in / mixes / +new-to-pool. A **"Detailed cross mode" toggle**
+  (renamed from the old "Expansion mode") reveals a **gender-split cross-outcome breakdown** per
+  pairing — a *Both* row (R+R, M+M) plus **♂ male / ♀ female** rows of R+M / R+D / M+D, colored on a
+  pink→red cost gradient (`♂ R+D` = his clean gene diluted; `♀ R+D` = fold-in). Click any box to
+  expand the per-gene detail. **Detailed cross mode is informational only — it NEVER changes the
+  score/ranking** (both `getTopPairs` and `malePairings` always call `scorePair(..., false, ...)`).
+- **Manage:** deletion-safety ranking; a specimen's folder color + `📁` tag show on each row.
+  Removing a specimen previews exactly what would be lost from the pool.
 - **Gene Map:** chromosome heatmap CR01–CR09. Hover shows the stat (colored per-stat via `statCol`)
   + value (colored by magnitude via `valCol`) + tier; **mutation/orange genes are outlined purple**;
   click a gene → a per-specimen 〇/⦿/⬤ breakdown box.
@@ -148,7 +157,10 @@ Genome=BeeWasp
 `mutTotal/mutCov/mutProg` (orange split out of the Standard counts — Standard total is now 64, not
 75). Surfaced as 💎 across Stable, Pairs, Manage, Analyze, and Gene Map.
 
-**Storage key:** `pg-v3` (localStorage).
+**Storage keys:** `pg-v3` (specimens; each may carry an optional `folderId`), `pg-folders-v1`
+(`[{id, name, color}]`). Legacy `pg-tags-v1` (old per-specimen colors) is read-only for back-compat.
+All are additive — old saves load fine (missing `folderId` = Unfiled); a code deploy to the same
+GitHub Pages origin never clears localStorage, so live users keep their data with no re-import.
 
 **pairedIds logic:** A specimen is "paired" if it has at least one valid partner of opposite gender in the stable. No cooldown restrictions.
 
@@ -348,11 +360,13 @@ When making changes to geneData.js, both tools pick up the update automatically 
 
 ## Current status / handoff (end of 2026-06-11 session)
 - **Deployed & branded.** App is renamed **PGBeeYiKeeper**, live on GitHub Pages, auto-deploying on push.
+  Real live users exist — treat their saves as sacred; only additive/back-compatible localStorage changes.
 - **Recent feature work (all committed):** bulk multi-file import; "Show critical genes" toggle
   (Stable + Pairs); hover stat/value coloring + mutation outlines on all gene maps; Pairs
   cross-outcome breakdown (gender-split, pink→red cost gradient) behind the renamed **Detailed cross
-  mode** (informational only — never alters the score); `06A2` reclassified std→crit; Manage-tab
-  intro rewritten (light blue) to explain remove-to-preview + the color tags; Data backup/restore.
+  mode** (informational only — never alters the score); `06A2` reclassified std→crit; Data
+  backup/restore; **Stable folders + drag-reorder, folder-owned color, cross-tab 📁 tags** (with a
+  read-only `pg-tags-v1` legacy-color fallback flagged to retire).
 - **Next up (open):** a **visual design pass**. A full design brief + 3 annotated screenshots
   (Stable / Pairs-detailed / Gene-Map) were prepared to hand to a design-focused Claude. Goal:
   consistent type scale, unified card/pill spec, spacing rhythm, stronger hierarchy — staying dark +

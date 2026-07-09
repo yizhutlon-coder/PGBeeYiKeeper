@@ -237,6 +237,18 @@ function CritGeneChips({ s }) {
   );
 }
 
+// Small "folder name" tag shown on a specimen box across tabs. Its text takes
+// the specimen's color-tag hue when one is set (set on the Stable tab).
+function FolderTag({ name, color }) {
+  if (!name) return null;
+  const c = color || C.mu;
+  return (
+    <span title={'Folder: ' + name} style={{ display:'inline-flex', alignItems:'center', gap:'3px', fontSize:'10px', fontWeight: color ? 500 : 400, padding:'1px 6px', borderRadius:'3px', background:C.sf, color:c, border:'0.5px solid '+(color ? color+'66' : C.b), maxWidth:'150px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', verticalAlign:'middle' }}>
+      <span aria-hidden="true">📁</span>{name}
+    </span>
+  );
+}
+
 // One cross-outcome tally chip (e.g. "R+M ×5 · 50% 〇").
 function CrossChip({ label, n, sub, col }) {
   if (!n) return null;
@@ -287,7 +299,18 @@ function CrossBreakdown({ cross }) {
 
 export default function Calculator() {
   const [specimens, setSpecimens] = useState([]);
-  const [tags, setTags] = useState({});
+  const [folders, setFolders] = useState([]);
+  // LEGACY-COMPAT (retire): read-only per-specimen color tags from the pre-folder
+  // version (`pg-tags-v1`). We never write this again — the color picker moved to
+  // folders — but we still READ it so early live users don't lose their old colors.
+  // Safe to delete this state + its load + the specColor fallback once folder colors
+  // are the norm. Nothing writes pg-tags-v1, so it can only shrink in relevance.
+  const [legacyTags, setLegacyTags] = useState({});
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverFolder, setDragOverFolder] = useState(undefined); // folder id hovered (null = Unfiled, undefined = none)
+  const [collapsedFolders, setCollapsedFolders] = useState({});
+  const [renamingFolder, setRenamingFolder] = useState(null);
+  const [folderRenameVal, setFolderRenameVal] = useState('');
   const [tab, setTab] = useState('analyze');
   const [expand, setExpand] = useState(false);
   const [expanded, setExpanded] = useState(null);
@@ -309,7 +332,9 @@ export default function Calculator() {
     (async () => {
       try { const r = await storage.get('pg-v3'); if (r?.value) setSpecimens(JSON.parse(r.value)); }
       catch(e) {}
-      try { const t = await storage.get('pg-tags-v1'); if (t?.value) setTags(JSON.parse(t.value)); }
+      try { const lt = await storage.get('pg-tags-v1'); if (lt?.value) setLegacyTags(JSON.parse(lt.value)); } // LEGACY-COMPAT (retire)
+      catch(e) {}
+      try { const f = await storage.get('pg-folders-v1'); if (f?.value) setFolders(JSON.parse(f.value)); }
       catch(e) {}
       setLoading(false);
     })();
@@ -323,14 +348,6 @@ export default function Calculator() {
   function remove(id) { const u = specimens.filter(s => s.id !== id); setSpecimens(u); persist(u); }
   function confirmDelete() { if (deleteCandidate) { remove(deleteCandidate.id); setDeleteCandidate(null); } }
 
-  function toggleTag(id, color) {
-    setTags(prev => {
-      const next = { ...prev, [id]: prev[id] === color ? null : color };
-      try { storage.set('pg-tags-v1', JSON.stringify(next)); } catch(e) {}
-      return next;
-    });
-  }
-
   function startRename(s) { setRenamingId(s.id); setRenameVal(s.name); }
   function commitRename() {
     if (!renamingId) return;
@@ -340,6 +357,66 @@ export default function Calculator() {
       setSpecimens(updated); persist(updated);
     }
     setRenamingId(null); setRenameVal('');
+  }
+
+  // ── FOLDERS ──────────────────────────────────────────────────────────────────
+  function persistFolders(list) {
+    setFolders(list);
+    try { storage.set('pg-folders-v1', JSON.stringify(list)); } catch(e) {}
+  }
+  function createFolder() {
+    const f = { id: 'f-' + Date.now() + '-' + Math.random().toString(36).slice(2,5), name: 'New folder' };
+    persistFolders([...folders, f]);
+    setRenamingFolder(f.id); setFolderRenameVal(f.name);
+  }
+  function commitFolderRename() {
+    if (!renamingFolder) return;
+    const trimmed = folderRenameVal.trim();
+    if (trimmed) persistFolders(folders.map(f => f.id === renamingFolder ? { ...f, name: trimmed } : f));
+    setRenamingFolder(null); setFolderRenameVal('');
+  }
+  function deleteFolder(id) {
+    const updated = specimens.map(s => (s.folderId ?? null) === id ? { ...s, folderId: null } : s);
+    setSpecimens(updated); persist(updated);
+    persistFolders(folders.filter(f => f.id !== id));
+  }
+  const folderName = id => folders.find(f => f.id === id)?.name || null;
+  // Color now lives on the folder; a specimen inherits its folder's color.
+  function setFolderColor(id, color) {
+    persistFolders(folders.map(f => f.id === id ? { ...f, color: f.color === color ? null : color } : f));
+  }
+  const folderColor = id => { const f = folders.find(x => x.id === id); return f?.color ? TAG_HEX[f.color] : null; };
+  // Folder color wins; fall back to the legacy per-specimen tag (LEGACY-COMPAT, retire).
+  const specColor = s => folderColor(s.folderId ?? null) || (legacyTags[s.id] ? TAG_HEX[legacyTags[s.id]] : null);
+
+  // ── DRAG REORDER (Stable + Pairs share the specimens array order) ─────────────
+  // Move dragged specimen to just before target. On Stable, adopt the target's
+  // folder (dropping onto a card in another folder files it there); on Pairs,
+  // keepFolder=true so reordering males never changes their folder.
+  function moveBeforeSpecimen(draggedId, targetId, keepFolder) {
+    if (draggedId === targetId) return;
+    const arr = [...specimens];
+    const di = arr.findIndex(s => s.id === draggedId);
+    if (di < 0) return;
+    const dragged = { ...arr[di] };
+    arr.splice(di, 1);
+    const ti = arr.findIndex(s => s.id === targetId);
+    if (!keepFolder && ti >= 0) dragged.folderId = arr[ti].folderId ?? null;
+    arr.splice(ti < 0 ? arr.length : ti, 0, dragged);
+    setSpecimens(arr); persist(arr);
+  }
+  // Move dragged specimen to the end of a folder group (fid = null → Unfiled).
+  function moveToFolderEnd(draggedId, fid) {
+    fid = fid ?? null;
+    const arr = [...specimens];
+    const di = arr.findIndex(s => s.id === draggedId);
+    if (di < 0) return;
+    const dragged = { ...arr[di], folderId: fid };
+    arr.splice(di, 1);
+    let lastIdx = -1;
+    arr.forEach((s, i) => { if ((s.folderId ?? null) === fid) lastIdx = i; });
+    arr.splice(lastIdx + 1, 0, dragged);
+    setSpecimens(arr); persist(arr);
   }
 
   function analyzeSpecimen() {
@@ -526,69 +603,143 @@ export default function Calculator() {
 
 
       {/* ── STABLE ── */}
-      {tab === 'stable' && (
-        <div>
-          {specimens.length > 0 && (
-            <label style={{ display:'inline-flex', alignItems:'center', gap:'6px', fontSize:'12px', cursor:'pointer', padding:'5px 10px', borderRadius:'6px', border:'0.5px solid '+(showCrit?C.crit:C.b), background:showCrit?C.critBg:'transparent', color:showCrit?C.crit:C.mu, marginBottom:'12px' }}>
-              <input type="checkbox" checked={showCrit} onChange={e => setShowCrit(e.target.checked)} style={{ margin:0 }} />
-              Show critical genes
-            </label>
-          )}
-          {specimens.length === 0
-            ? <p style={{ color:C.mu, fontSize:'14px' }}>No specimens loaded. Use the Analyze tab to add genome exports.</p>
-            : <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(230px, 1fr))', gap:'10px' }}>
-                  {specimens.map(s => {
-                  const st = calcStats(s);
-                  const gColor = s.gender === 'male' ? '#60A5FA' : s.gender === 'female' ? '#F472B6' : C.mu;
-                  const gSym = s.gender === 'male' ? '♂' : s.gender === 'female' ? '♀' : '?';
-                  const tagColor = tags[s.id] ? TAG_HEX[tags[s.id]] : null;
-                  return (
-                    <div key={s.id} style={{ background:C.card, border:'0.5px solid '+(tagColor||C.b), borderRadius:'10px', padding:'12px 14px', boxShadow: tagColor ? 'inset 3px 0 0 '+tagColor : 'none' }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'10px' }}>
-                        <div style={{ minWidth:0, flex:1 }}>
-                          {renamingId === s.id
-                            ? <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
-                                <span style={{ color:gColor, fontWeight:600, flexShrink:0 }}>{gSym}</span>
-                                <input
-                                  autoFocus
-                                  value={renameVal}
-                                  onChange={e => setRenameVal(e.target.value)}
-                                  onBlur={commitRename}
-                                  onKeyDown={e => { if (e.key==='Enter') commitRename(); if (e.key==='Escape') { setRenamingId(null); setRenameVal(''); } }}
-                                  style={{ flex:1, minWidth:0, fontSize:'13px', fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid '+C.crit, outline:'none', color:C.tx, padding:'0 2px' }}
-                                />
-                              </div>
-                            : <div style={{ fontWeight:500, fontSize:'13px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', cursor:'text' }} onClick={() => startRename(s)} title="Click to rename">
-                                <span style={{ color:gColor, marginRight:'4px', fontWeight:600 }}>{gSym}</span>{s.name}
-                                <span style={{ color:C.dim, fontSize:'11px', marginLeft:'5px', opacity:0.6 }}>✎</span>
-                              </div>
-                          }
-                          <div style={{ fontSize:'11px', color:C.mu, marginTop:'2px', textTransform:'capitalize' }}>{s.gender}</div>
-                        </div>
-                        <button onClick={() => setDeleteCandidate(s)} style={{ border:'none', background:'none', cursor:'pointer', color:C.dim, fontSize:'16px', padding:'0', lineHeight:1, marginLeft:'6px', flexShrink:0 }}>×</button>
+      {tab === 'stable' && (() => {
+        const groups = folders.length
+          ? [
+              ...folders.map(f => ({ id: f.id, name: f.name, color: f.color, items: specimens.filter(s => (s.folderId ?? null) === f.id) })),
+              // Unfiled also catches any specimen whose folderId no longer matches a
+              // known folder (orphan safety), so nothing can vanish from the stable.
+              { id: null, name: 'Unfiled', items: specimens.filter(s => !folders.some(f => f.id === (s.folderId ?? null))) },
+            ]
+          : null;
+
+        const renderCard = (s) => {
+          const st = calcStats(s);
+          const gColor = s.gender === 'male' ? '#60A5FA' : s.gender === 'female' ? '#F472B6' : C.mu;
+          const gSym = s.gender === 'male' ? '♂' : s.gender === 'female' ? '♀' : '?';
+          const tagColor = specColor(s);
+          const fName = folderName(s.folderId ?? null);
+          return (
+            <div key={s.id}
+              draggable={renamingId !== s.id}
+              onDragStart={e => { setDraggingId(s.id); e.dataTransfer.effectAllowed = 'move'; }}
+              onDragEnd={() => { setDraggingId(null); setDragOverFolder(undefined); }}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); e.stopPropagation(); if (draggingId) moveBeforeSpecimen(draggingId, s.id); setDraggingId(null); setDragOverFolder(undefined); }}
+              style={{ background:C.card, border:'0.5px solid '+(tagColor||C.b), borderRadius:'10px', padding:'12px 14px', boxShadow: tagColor ? 'inset 3px 0 0 '+tagColor : 'none', opacity: draggingId===s.id ? 0.4 : 1, cursor: renamingId===s.id ? 'default' : 'grab' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'10px' }}>
+                <div style={{ minWidth:0, flex:1 }}>
+                  {renamingId === s.id
+                    ? <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+                        <span style={{ color:gColor, fontWeight:600, flexShrink:0 }}>{gSym}</span>
+                        <input
+                          autoFocus
+                          value={renameVal}
+                          onChange={e => setRenameVal(e.target.value)}
+                          onBlur={commitRename}
+                          onKeyDown={e => { if (e.key==='Enter') commitRename(); if (e.key==='Escape') { setRenamingId(null); setRenameVal(''); } }}
+                          style={{ flex:1, minWidth:0, fontSize:'13px', fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid '+C.crit, outline:'none', color:C.tx, padding:'0 2px' }}
+                        />
                       </div>
-                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px', marginBottom:'8px' }}>
-                        {[['Score', st.score, C.tx],['Crit 〇', st.critR, C.crit],['Std 〇', st.stdR, C.std]].map(([lbl,val,col]) => (
-                          <div key={lbl} style={{ background:C.sf, borderRadius:'6px', padding:'5px 4px', textAlign:'center' }}>
-                            <div style={{ fontSize:'16px', fontWeight:500, color:col }}>{val}</div>
-                            <div style={{ fontSize:'10px', color:C.mu }}>{lbl}</div>
-                          </div>
-                        ))}
+                    : <div style={{ fontWeight:500, fontSize:'13px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', cursor:'text' }} onClick={() => startRename(s)} title="Click to rename">
+                        <span style={{ color:gColor, marginRight:'4px', fontWeight:600 }}>{gSym}</span>{s.name}
+                        <span style={{ color:C.dim, fontSize:'11px', marginLeft:'5px', opacity:0.6 }}>✎</span>
                       </div>
-                      {(st.mutR > 0 || st.mixed > 0) && (
-                        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-                          {st.mutR > 0 && <Pill label={'💎 ' + st.mutR + ' paramount 〇 (mutation)'} color={C.gem} bg={C.gemBg} />}
-                          {st.mixed > 0 && <Pill label={st.mixed + ' mixed stat genes'} color={C.mixed} bg={C.mixedBg} />}
-                        </div>
-                      )}
-                      {showCrit && <CritGeneChips s={s} />}
-                    </div>
-                  );
-                })}
+                  }
+                  <div style={{ fontSize:'11px', color:C.mu, marginTop:'2px', textTransform:'capitalize' }}>{s.gender}</div>
+                </div>
+                <button onClick={() => setDeleteCandidate(s)} style={{ border:'none', background:'none', cursor:'pointer', color:C.dim, fontSize:'16px', padding:'0', lineHeight:1, marginLeft:'6px', flexShrink:0 }}>×</button>
               </div>
-          }
-        </div>
-      )}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'5px', marginBottom:'8px' }}>
+                {[['Score', st.score, C.tx],['Crit 〇', st.critR, C.crit],['Std 〇', st.stdR, C.std]].map(([lbl,val,col]) => (
+                  <div key={lbl} style={{ background:C.sf, borderRadius:'6px', padding:'5px 4px', textAlign:'center' }}>
+                    <div style={{ fontSize:'16px', fontWeight:500, color:col }}>{val}</div>
+                    <div style={{ fontSize:'10px', color:C.mu }}>{lbl}</div>
+                  </div>
+                ))}
+              </div>
+              {(st.mutR > 0 || st.mixed > 0) && (
+                <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                  {st.mutR > 0 && <Pill label={'💎 ' + st.mutR + ' paramount 〇 (mutation)'} color={C.gem} bg={C.gemBg} />}
+                  {st.mixed > 0 && <Pill label={st.mixed + ' mixed stat genes'} color={C.mixed} bg={C.mixedBg} />}
+                </div>
+              )}
+              {fName && <div style={{ marginTop:'8px' }}><FolderTag name={fName} color={tagColor} /></div>}
+              {showCrit && <CritGeneChips s={s} />}
+            </div>
+          );
+        };
+
+        const grid = (items, folderId) => {
+          const fid = folderId ?? null;
+          const isOver = draggingId && (dragOverFolder ?? undefined) === fid;
+          return (
+            <div
+              onDragOver={e => { e.preventDefault(); setDragOverFolder(fid); }}
+              onDrop={e => { e.preventDefault(); if (draggingId) moveToFolderEnd(draggingId, fid); setDraggingId(null); setDragOverFolder(undefined); }}
+              style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(230px, 1fr))', gap:'10px', minHeight: groups ? '52px' : undefined, padding: groups ? '6px' : 0, borderRadius:'8px', outline: isOver ? '1px dashed '+C.floor : 'none', outlineOffset:'2px', background: isOver ? C.floorBg+'55' : 'transparent' }}>
+              {items.length ? items.map(renderCard) : <div style={{ fontSize:'11px', color:C.dim, padding:'10px', gridColumn:'1/-1' }}>Drag specimens here to file them.</div>}
+            </div>
+          );
+        };
+
+        return (
+          <div>
+            {specimens.length > 0 && (
+              <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap', marginBottom:'12px' }}>
+                <label style={{ display:'inline-flex', alignItems:'center', gap:'6px', fontSize:'12px', cursor:'pointer', padding:'5px 10px', borderRadius:'6px', border:'0.5px solid '+(showCrit?C.crit:C.b), background:showCrit?C.critBg:'transparent', color:showCrit?C.crit:C.mu }}>
+                  <input type="checkbox" checked={showCrit} onChange={e => setShowCrit(e.target.checked)} style={{ margin:0 }} />
+                  Show critical genes
+                </label>
+                <button onClick={createFolder} style={{ padding:'5px 12px', fontSize:'12px', cursor:'pointer', background:'transparent', color:C.mu, border:'0.5px solid '+C.b, borderRadius:'6px' }}>📁 New folder</button>
+                <span style={{ fontSize:'11px', color:C.dim }}>Drag cards to reorder or file into folders</span>
+              </div>
+            )}
+            {specimens.length === 0
+              ? <p style={{ color:C.mu, fontSize:'14px' }}>No specimens loaded. Use the Analyze tab to add genome exports.</p>
+              : groups
+                ? <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
+                    {groups.map(g => {
+                      const key = g.id ?? '__unfiled__';
+                      const collapsed = !!collapsedFolders[key];
+                      const isOver = draggingId && (dragOverFolder ?? undefined) === (g.id ?? null);
+                      return (
+                        <div key={key}>
+                          <div
+                            onDragOver={e => { e.preventDefault(); setDragOverFolder(g.id ?? null); }}
+                            onDrop={e => { e.preventDefault(); if (draggingId) moveToFolderEnd(draggingId, g.id ?? null); setDraggingId(null); setDragOverFolder(undefined); }}
+                            style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px 10px', borderRadius:'7px', background: isOver ? C.floorBg : C.sf, border:'0.5px solid '+(isOver ? C.floor : C.b), marginBottom:'6px' }}>
+                            <button onClick={() => setCollapsedFolders(c => ({ ...c, [key]: !collapsed }))} style={{ border:'none', background:'none', cursor:'pointer', color:C.mu, fontSize:'12px', padding:0, lineHeight:1 }}>{collapsed ? '▸' : '▾'}</button>
+                            {g.id && renamingFolder === g.id
+                              ? <input autoFocus value={folderRenameVal} onChange={e => setFolderRenameVal(e.target.value)} onBlur={commitFolderRename}
+                                  onKeyDown={e => { if (e.key==='Enter') commitFolderRename(); if (e.key==='Escape') { setRenamingFolder(null); setFolderRenameVal(''); } }}
+                                  style={{ fontSize:'13px', fontWeight:500, background:'transparent', border:'none', borderBottom:'1px solid '+C.crit, outline:'none', color:C.tx, padding:'0 2px', width:'160px' }} />
+                              : <span onClick={() => { if (g.id) { setRenamingFolder(g.id); setFolderRenameVal(g.name); } }} title={g.id ? 'Click to rename' : ''} style={{ fontWeight:500, fontSize:'13px', cursor: g.id ? 'text' : 'default', color: g.color ? TAG_HEX[g.color] : (g.id ? C.tx : C.mu) }}>
+                                  {g.id ? '📁 ' + g.name : g.name}{g.id && <span style={{ color:C.dim, fontSize:'11px', marginLeft:'5px', opacity:0.6 }}>✎</span>}
+                                </span>
+                            }
+                            <span style={{ fontSize:'11px', color:C.mu }}>({g.items.length})</span>
+                            <div style={{ flex:1 }} />
+                            {g.id && (
+                              <div style={{ display:'flex', gap:'3px', marginRight:'2px' }}>
+                                {TAG_COLORS.map(c => (
+                                  <button key={c} onClick={() => setFolderColor(g.id, c)} title={'Folder color: ' + c}
+                                    style={{ width:'14px', height:'14px', borderRadius:'3px', cursor:'pointer', padding:0, border:'1.5px solid '+(g.color===c ? TAG_HEX[c] : TAG_HEX[c]+'55'), background: g.color===c ? TAG_HEX[c] : 'transparent' }} />
+                                ))}
+                              </div>
+                            )}
+                            {g.id && <button onClick={() => deleteFolder(g.id)} title="Delete folder (specimens move to Unfiled)" style={{ border:'none', background:'none', cursor:'pointer', color:C.dim, fontSize:'15px', padding:'0 2px', lineHeight:1 }}>×</button>}
+                          </div>
+                          {!collapsed && grid(g.items, g.id)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                : grid(specimens, null)
+            }
+          </div>
+        );
+      })()}
 
       {/* ── PAIRINGS ── */}
       {tab === 'pairings' && (() => {
@@ -633,16 +784,22 @@ export default function Calculator() {
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:'8px' }}>
               {males.map(m => {
                 const st = calcStats(m);
-                const tagColor = tags[m.id] ? TAG_HEX[tags[m.id]] : null;
+                const tagColor = specColor(m);
                 const mPairs = malePairings(m);
                 const topScore = mPairs.length > 0 ? mPairs[0].score.toFixed(1) : '—';
                 const newCrit = females.length > 0 ? Math.max(...mPairs.map(p =>
                   Object.entries(SG).filter(([c,info]) => (info.t==='crit'||info.t==='gem') && cov[c]?.best==='D' && (p.m.genome[c]||'D') in {R:1,x:1}).length
                 )) : 0;
+                const mFolder = folderName(m.folderId ?? null);
                 return (
                   <div key={m.id}
+                    draggable
+                    onDragStart={e => { setDraggingId(m.id); e.dataTransfer.effectAllowed = 'move'; }}
+                    onDragEnd={() => setDraggingId(null)}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); if (draggingId && draggingId !== m.id) moveBeforeSpecimen(draggingId, m.id, true); setDraggingId(null); }}
                     onClick={() => { setSelectedMale(m.id); setExpanded(null); }}
-                    style={{ background:C.card, border:'0.5px solid '+(tagColor||C.b), borderRadius:'10px', padding:'12px 14px', cursor:'pointer', boxShadow: tagColor ? 'inset 3px 0 0 '+tagColor : 'none', transition:'border-color 0.1s' }}
+                    style={{ background:C.card, border:'0.5px solid '+(tagColor||C.b), borderRadius:'10px', padding:'12px 14px', cursor:'pointer', boxShadow: tagColor ? 'inset 3px 0 0 '+tagColor : 'none', transition:'border-color 0.1s', opacity: draggingId===m.id ? 0.4 : 1 }}
                     onMouseEnter={e => e.currentTarget.style.borderColor = '#4A5070'}
                     onMouseLeave={e => e.currentTarget.style.borderColor = tagColor||C.b}
                   >
@@ -651,6 +808,7 @@ export default function Calculator() {
                       <span style={{ color:'#60A5FA' }}>♂ {m.name}</span>
                       {st.mutR > 0 && <span title="paramount 〇 mutations" style={{ marginLeft:'6px', fontSize:'10px', color:C.gem, background:C.gemBg, border:'0.5px solid '+C.gem+'66', borderRadius:'3px', padding:'1px 5px' }}>💎 {st.mutR}</span>}
                     </div>
+                    {mFolder && <div style={{ marginBottom:'8px' }}><FolderTag name={mFolder} color={tagColor} /></div>}
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'5px', fontSize:'11px' }}>
                       <div style={{ background:C.sf, borderRadius:'5px', padding:'4px 6px', textAlign:'center' }}>
                         <div style={{ fontSize:'15px', fontWeight:500, color:C.tx }}>{st.critR}</div>
@@ -689,7 +847,7 @@ export default function Calculator() {
                 ← Males
               </button>
               <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-                {tags[m.id] && <span style={{ display:'inline-block', width:'9px', height:'9px', borderRadius:'2px', background:TAG_HEX[tags[m.id]] }} />}
+                {specColor(m) && <span style={{ display:'inline-block', width:'9px', height:'9px', borderRadius:'2px', background:specColor(m) }} />}
                 <span style={{ color:'#60A5FA', fontWeight:500, fontSize:'14px' }}>♂ {m.name}</span>
               </div>
               <span style={{ fontSize:'12px', color:C.mu }}>{mPairs.length} female{mPairs.length !== 1 ? 's' : ''} available</span>
@@ -810,9 +968,10 @@ export default function Calculator() {
                             </span>
                             <div style={{ minWidth:0, flex:1 }}>
                               <div style={{ fontSize:'13px', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:'5px' }}>
-                                {tags[f.id] && <span style={{ display:'inline-block', width:'8px', height:'8px', borderRadius:'2px', background:TAG_HEX[tags[f.id]], marginRight:'5px', verticalAlign:'middle' }} />}
+                                {specColor(f) && <span style={{ display:'inline-block', width:'8px', height:'8px', borderRadius:'2px', background:specColor(f), marginRight:'5px', verticalAlign:'middle' }} />}
                                 <span style={{ color:'#F472B6' }}>♀ {f.name}</span>
                                 <span style={{ fontSize:'11px', color:C.mu, fontWeight:400, marginLeft:'8px' }}>score {p.score.toFixed(1)}</span>
+                                {folderName(f.folderId ?? null) && <span style={{ marginLeft:'8px' }}><FolderTag name={folderName(f.folderId ?? null)} color={specColor(f)} /></span>}
                               </div>
                               <div style={{ display:'flex', gap:'5px', flexWrap:'wrap' }}>
                                 <span style={{ fontSize:'11px', padding:'2px 7px', borderRadius:'4px', background: canClarify ? '#030C22' : C.sf, color: canClarify ? '#60A5FA' : C.dim, border:'0.5px solid '+(canClarify ? '#3060A0' : C.dim+'44') }}>
@@ -902,7 +1061,7 @@ export default function Calculator() {
             : <>
                 <p style={{ fontSize:'12px', color:C.floor, margin:'0 0 12px', lineHeight:1.7 }}>
                   Specimens are ordered safest → riskiest to remove. Click the × on any specimen to attempt removal — you'll first see a detailed breakdown of exactly what would be lost from the gene pool before you confirm.
-                  The four colored buttons tag a specimen: that color then marks it across every other tab (Stable, Pairs, Gene Map), so you can keep track of bloodlines or flag any specimen worth special note.
+                  Folders and their colors are set on the Stable tab; every card in a colored folder carries that color across every tab (Pairs, Manage, Gene Map), so you can track bloodlines at a glance.
                 </p>
                 <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                   {delList.map(({ s, critR, uniq, score, risk, isOnly }) => {
@@ -917,11 +1076,12 @@ export default function Calculator() {
                     const notPaired = !inPairs && specimens.length > 1;
                     const mutR = calcStats(s).mutR;
                     return (
-                      <div key={s.id} style={{ background:C.card, opacity: notPaired ? 0.72 : 1, border: tags[s.id] ? '0.5px solid '+TAG_HEX[tags[s.id]] : notPaired ? '1px dashed '+C.mu : '0.5px solid '+C.b, borderRadius:'10px', padding:'12px 14px', boxShadow: tags[s.id] ? 'inset 3px 0 0 '+TAG_HEX[tags[s.id]] : 'none' }}>
+                      <div key={s.id} style={{ background:C.card, opacity: notPaired ? 0.72 : 1, border: specColor(s) ? '0.5px solid '+specColor(s) : notPaired ? '1px dashed '+C.mu : '0.5px solid '+C.b, borderRadius:'10px', padding:'12px 14px', boxShadow: specColor(s) ? 'inset 3px 0 0 '+specColor(s) : 'none' }}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'8px', marginBottom:'8px' }}>
                           <div>
-                            <div style={{ fontWeight:500, fontSize:'13px' }}>
-                              <span style={{ color:gColor, marginRight:'4px', fontWeight:600 }}>{gSym}</span>{s.name}
+                            <div style={{ fontWeight:500, fontSize:'13px', display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                              <span><span style={{ color:gColor, marginRight:'4px', fontWeight:600 }}>{gSym}</span>{s.name}</span>
+                              {folderName(s.folderId ?? null) && <FolderTag name={folderName(s.folderId ?? null)} color={specColor(s)} />}
                             </div>
                             <div style={{ fontSize:'11px', color:C.mu, marginTop:'2px' }}>score {score} &middot; {critR.length} critical 〇{mutR > 0 && <span style={{ color:C.gem }}> &middot; 💎 {mutR} paramount 〇</span>}</div>
                           </div>
@@ -929,11 +1089,6 @@ export default function Calculator() {
                             {notPaired && (
                               <span style={{ fontSize:'11px', fontWeight:500, padding:'3px 7px', borderRadius:'4px', background:'transparent', color:C.mu, border:'1px dashed '+C.mu, whiteSpace:'nowrap' }}>⊘ Not paired</span>
                             )}
-                            <div style={{ display:'flex', gap:'3px' }}>
-                              {TAG_COLORS.map(c => (
-                                <button key={c} onClick={() => toggleTag(s.id, c)} title={c} style={{ width:'14px', height:'14px', borderRadius:'3px', cursor:'pointer', padding:0, border:'1.5px solid '+(tags[s.id]===c ? TAG_HEX[c] : TAG_HEX[c]+'55'), background: tags[s.id]===c ? TAG_HEX[c] : 'transparent', transition:'all 0.1s' }} />
-                              ))}
-                            </div>
                             <span style={{ fontSize:'11px', fontWeight:500, padding:'3px 8px', borderRadius:'4px', background:rm.bg, color:rm.color, whiteSpace:'nowrap' }}>{rm.label}</span>
                             <button onClick={() => setDeleteCandidate(s)} title="Remove from stable" style={{ border:'none', background:'none', cursor:'pointer', color:C.dim, fontSize:'17px', padding:'0 2px', lineHeight:1, flexShrink:0 }}>×</button>
                           </div>
